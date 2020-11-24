@@ -1,6 +1,6 @@
 const Web3 = require("web3");
-const truffleContract = require("truffle-contract");
 const $ = require("jquery");
+const truffleContract = require("truffle-contract");
 const rockPaperScissorsJson = require("../../build/contracts/RockPaperScissors.json");
 
 const App = {
@@ -22,15 +22,14 @@ const App = {
   showContractBalance: async function () {
     const deployed = await this.rockPaperScissors.deployed();
     const balanceInWei = await this.web3.eth.getBalance(deployed.address);
-    const balanceElement = document.getElementById("contractBalance");
     const balanceInEther = this.web3.utils.fromWei(balanceInWei, "ether");
-    balanceElement.innerHTML = `${parseFloat(balanceInEther).toFixed(4)} ETH`;
+    $("#contractBalance").html(`${parseFloat(balanceInEther).toFixed(4)} ETH`);
   },
 
   setUpApp: async function () {
     const { web3 } = this;
 
-    const labels = ["Deployer", "Accts 2", "Accts 3", "Accts 4", "Accts 5"];
+    const labels = ["Deployer", "Alice", "Bob", "", ""];
 
     web3.eth
       .getAccounts()
