@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.7.0;
 
+import "./SafeMath.sol";
+
 contract RockPaperScissors {
+
+    using SafeMath for uint;
     
     enum Choice  { None, Rock, Paper, Scissors }
 
@@ -20,9 +24,9 @@ contract RockPaperScissors {
     mapping (bytes32 => Game) public games;
     mapping (address => uint) public winnings;
 
-    uint constant public DEFAULT_GAME_LIFETIME = 86400 seconds; // 24 hours
-    uint constant public MAX_GAME_LIFETIME = 31536000 seconds; // 1 year
-    uint constant public MIN_GAME_LIFETIME = 60 seconds; //1 minute
+    uint constant public DEFAULT_GAME_LIFETIME = 1 days;
+    uint constant public MAX_GAME_LIFETIME = 52 weeks;
+    uint constant public MIN_GAME_LIFETIME = 1 minutes;
     uint constant public MIN_STAKE = 0; //TODO: Set to dev/Game fee
     bytes32 constant public NULL_BYTES = bytes32(0);
 
@@ -35,13 +39,13 @@ contract RockPaperScissors {
 
     constructor (){}
     
-     function generateChoice (Choice choice, bytes32 mask) view public returns (bytes32 hashedChoice) {
+    function generateChoice (Choice choice, bytes32 mask) view public returns (bytes32 hashedChoice) {
         require(choice != Choice.None, "RockPaperScissors::generateChoice:Choice can not be none");
         require(mask != NULL_BYTES, "RockPaperScissors::generateChoice:mask can not be empty");
-        return keccak256(abi.encodePacked(choice, mask, address(this)));
+        return keccak256(abi.encodePacked(choice, mask, msg.sender, address(this)));
     }
 
-    function createGame(address otherPlayer, bytes32 hashedChoice, uint gameLifetime, bool stakeFromWinnings) payable public {
+    function createGame(address otherPlayer, bytes32 hashedChoice, uint256 gameLifetime, bool stakeFromWinnings) payable public {
         require(msg.sender != otherPlayer, "RockPaperScissors::createGame:Player addresses must be different");
         bytes32 gameId = keccak256(abi.encodePacked(msg.sender, otherPlayer, block.number));
 
@@ -60,9 +64,8 @@ contract RockPaperScissors {
         game.playerOne = msg.sender; //SSTORE
         game.playerTwo = otherPlayer; //SSTORE
         game.stake = msg.value; //SSTORE
-
-        //TODO: use safeMath
-        uint _gameDeadline = gameLifetime == 0 ? (block.timestamp + DEFAULT_GAME_LIFETIME) : (block.timestamp + gameLifetime);
+                
+        uint _gameDeadline = gameLifetime > MIN_GAME_LIFETIME ? gameLifetime.add(block.timestamp): DEFAULT_GAME_LIFETIME.add(block.timestamp);
         game.deadline = _gameDeadline; //SSTORE
         
         emit LogGameCreated(gameId, msg.sender, otherPlayer, msg.value, _gameDeadline);
