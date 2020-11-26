@@ -8,6 +8,7 @@ contract RockPaperScissors {
     using SafeMath for uint;
     
     enum Choice  { None, Rock, Paper, Scissors }
+    uint nextGameId;
 
     struct Game {
         address playerOne;
@@ -21,7 +22,7 @@ contract RockPaperScissors {
         bool playerTwoIsEnrolled;  
     }
 
-    mapping (bytes32 => Game) public games;
+    mapping (uint => Game) public games;
     mapping (address => uint) public winnings;
 
     uint constant public DEFAULT_GAME_LIFETIME = 1 days;
@@ -30,12 +31,12 @@ contract RockPaperScissors {
     uint constant public MIN_STAKE = 0; //TODO: Set to dev/Game fee
     bytes32 constant public NULL_BYTES = bytes32(0);
 
-    event LogGameCreated(bytes32 indexed gameId, address indexed playerOne, address indexed playerTwo, uint staked, uint deadline, bytes32 gameIdEntropy);    
-    event LogGameRetired(bytes32 indexed gameId, address indexed winner, address indexed loser, uint pay, uint retireTimeStamp);
-    event LogChoiceRevealed(bytes32 indexed gameId, address indexed revealer, Choice choice);
-    event LogChoiceCommited(bytes32 indexed gameId, address indexed commiter, bytes32 hashedChoice);
-    event LogGameMovesTied(bytes32 indexed gameId, Choice choiceOne, Choice choiceTwo);
-    event LogGameSettled(bytes32 indexed gameId, address settler, uint pay, uint settlementTimeStamp);
+    event LogGameCreated(uint indexed gameId, address indexed playerOne, address indexed playerTwo, uint staked, uint deadline);    
+    event LogGameRetired(uint indexed gameId, address indexed winner, address indexed loser, uint pay, uint retireTimeStamp);
+    event LogChoiceRevealed(uint indexed gameId, address indexed revealer, Choice choice);
+    event LogChoiceCommited(uint indexed gameId, address indexed commiter, bytes32 hashedChoice);
+    event LogGameMovesTied(uint indexed gameId, Choice choiceOne, Choice choiceTwo);
+    event LogGameSettled(uint indexed gameId, address settler, uint pay, uint settlementTimeStamp);
     event LogPayout(address indexed payee, uint pay);
 
     constructor (){}
@@ -46,53 +47,39 @@ contract RockPaperScissors {
         return keccak256(abi.encodePacked(choice, mask, msg.sender, address(this)));
     }
 
-    function createGame(address otherPlayer, bytes32 hashedChoice, uint256 gameLifetime, bytes32 gameIdEntropy) payable public {
-        require(msg.value >= MIN_STAKE, "RockPaperScissors::createGame:Insufficient stake funds");        
+    function createGame(address otherPlayer, bytes32 hashedChoice, uint256 gameLifetime, bool stakeFromWinnings, uint amountFromStake) payable public {               
         require(msg.sender != otherPlayer, "RockPaperScissors::createGame:Player addresses must be different");
         require(hashedChoice != NULL_BYTES, "RockPaperScissors::play:Invalid hashedChoice value");
         require(gameLifetime >= MIN_GAME_LIFETIME,"RockPaperScissors::createGame:Invalid minimum game deadline");
         require(gameLifetime <= MAX_GAME_LIFETIME,"RockPaperScissors::createGame:Invalid minimum game deadline");        
 
-        bytes32 gameId = keccak256(abi.encodePacked(msg.sender, otherPlayer, block.number, gameIdEntropy));
-        require(games[gameId].deadline == 0, "RockPaperScissors::createGame:An active game exists with given inputs");
+        uint gameId = nextGameId;
+        require(games[gameId].deadline == 0, "RockPaperScissors::createGame:An active game exists with given inputs"); //SSLOAD
         
         Game storage game = games[gameId];
+
+        if(stakeFromWinnings){
+            require(msg.value == 0, "RockPaperScissors::createGame:Sent value should be 0 when staking from winnings");
+            require(amountFromStake >= MIN_STAKE, "RockPaperScissors::createGameFromWinnings:Invalid minumum stake amount");
+            require(winnings[msg.sender] >= amountFromStake, "RockPaperScissors::createGameFromWinnings:Insufficient stake funds in winnings");
+            winnings[msg.sender].sub(amountFromStake); //SSTORE
+            game.stake = amountFromStake; //SSTORE
+        }else{
+            require(msg.value >= MIN_STAKE, "RockPaperScissors::createGame:Insufficient stake funds");
+            game.stake = msg.value; //SSTORE
+        }        
+       
         game.playerOne = msg.sender; //SSTORE
-        game.playerTwo = otherPlayer; //SSTORE
-        game.stake = msg.value; //SSTORE
+        game.playerTwo = otherPlayer; //SSTORE        
                 
         uint _gameDeadline = gameLifetime > MIN_GAME_LIFETIME ? gameLifetime.add(block.timestamp): DEFAULT_GAME_LIFETIME.add(block.timestamp);
         game.deadline = _gameDeadline; //SSTORE
         
-        emit LogGameCreated(gameId, msg.sender, otherPlayer, msg.value, _gameDeadline, gameIdEntropy);
-    }
-    
-    function createGameFromWinnings(address otherPlayer, bytes32 hashedChoice, uint256 gameLifetime, uint stakeAmount, bytes32 gameIdEntropy) public {        
-        require(stakeAmount >= MIN_STAKE, "RockPaperScissors::createGameFromWinnings:Invalid minumum stake amount");
-        require(winnings[msg.sender] >= stakeAmount, "RockPaperScissors::createGameFromWinnings:Insufficient stake funds in winnings");
-
-        require(msg.sender != otherPlayer, "RockPaperScissors::createGameFromWinnings:Player addresses must be different");
-        require(hashedChoice != NULL_BYTES, "RockPaperScissors::createGameFromWinnings:Invalid hashedChoice value");
-        require(gameLifetime >= MIN_GAME_LIFETIME,"RockPaperScissors::createGameFromWinnings:Invalid minimum game deadline");
-        require(gameLifetime <= MAX_GAME_LIFETIME,"RockPaperScissors::crecreateGameFromWinningsateGame:Invalid minimum game deadline");        
-        
-        bytes32 gameId = keccak256(abi.encodePacked(msg.sender, otherPlayer, block.number, gameIdEntropy));
-        require(games[gameId].deadline == 0, "RockPaperScissors::createGameFromWinnings:An active game exists with given inputs");
-
-        Game storage game = games[gameId];
-        game.playerOne = msg.sender; //SSTORE
-        game.playerTwo = otherPlayer; //SSTORE
-
-        winnings[msg.sender].sub(stakeAmount); //SSTORE
-        game.stake = stakeAmount; //SSTORE
-                
-        uint _gameDeadline = gameLifetime > MIN_GAME_LIFETIME ? gameLifetime.add(block.timestamp): DEFAULT_GAME_LIFETIME.add(block.timestamp);
-        game.deadline = _gameDeadline; //SSTORE
-        
-        emit LogGameCreated(gameId, msg.sender, otherPlayer, stakeAmount, _gameDeadline, gameIdEntropy);
+        nextGameId = nextGameId.add(1);
+        emit LogGameCreated(gameId, msg.sender, otherPlayer, msg.value, _gameDeadline);
     }
 
-    function enrol(bytes32 gameId, bytes32 hashedChoice, bool stakeFromWinnings) public payable {
+    function enrol(uint gameId, bytes32 hashedChoice, bool stakeFromWinnings) public payable {
         uint _deadline = games[gameId].deadline; //SSLOAD
         require(_deadline != 0, "RockPaperScissors::enrol:game does not exist");
         require(block.timestamp <= _deadline, "RockPaperScissors::enrol:game has expired");
@@ -119,7 +106,7 @@ contract RockPaperScissors {
         emit LogChoiceCommited(gameId, msg.sender, hashedChoice);
     }
 
-    function play(bytes32 hashedChoice, bytes32 gameId) public {        
+    function play(uint gameId,bytes32 hashedChoice) public {        
         require(hashedChoice != NULL_BYTES, "RockPaperScissors::play:Invalid hashedChoice value");
         
         uint _deadline = games[gameId].deadline; //SSLOAD
@@ -144,7 +131,7 @@ contract RockPaperScissors {
         emit LogChoiceCommited(gameId, msg.sender, hashedChoice);
     }
 
-    function reveal(Choice choice, bytes32 mask, bytes32 gameId) public returns (Choice) {
+    function reveal(uint gameId, Choice choice, bytes32 mask) public returns (Choice) {
         require(games[gameId].deadline != 0, "RockPaperScissors::reveal:game does not exist"); //SSLOAD        
         bytes32 _commitTwo = games[gameId].commitTwo; //SSLOAD
         bytes32 _commitOne = games[gameId].commitOne; //SSLOAD
@@ -177,7 +164,7 @@ contract RockPaperScissors {
         }
     }
 
-    function retire(bytes32 gameId, address winner, address loser) internal {
+    function retire(uint gameId, address winner, address loser) internal {
         uint pay = games[gameId].stake; //SSLOAD
         winnings[winner].add(pay > 0 ? pay : 0); //SSTORE
         delete games[gameId];
@@ -185,7 +172,7 @@ contract RockPaperScissors {
         emit LogGameRetired(gameId, winner, loser, pay, block.timestamp);
     }
 
-    function settle(bytes32 gameId) external {
+    function settle(uint gameId) external {
         require(block.timestamp > games[gameId].deadline);
         uint pay = games[gameId].stake; //SSLOAD
         bool choiceOneRevealed = games[gameId].choiceOne == Choice.None; //SSLOAD
@@ -215,7 +202,7 @@ contract RockPaperScissors {
         LogGameSettled(gameId, msg.sender, pay, block.timestamp);
     }
 
-    function resolve(bytes32 gameId, Choice choiceOne, Choice choiceTwo) internal {
+    function resolve(uint gameId, Choice choiceOne, Choice choiceTwo) internal {
         if(choiceOne == choiceTwo) {
             games[gameId].commitOne = NULL_BYTES; //SSTORE ? delete
             games[gameId].choiceOne = Choice.None; //SSTORE
