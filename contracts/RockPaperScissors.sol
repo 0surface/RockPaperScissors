@@ -30,7 +30,7 @@ contract RockPaperScissors {
     uint constant public MIN_STAKE = 0; //TODO: Set to dev/Game fee
     bytes32 constant public NULL_BYTES = bytes32(0);
 
-    event LogGameCreated(bytes32 indexed gameId, address indexed playerOne, address indexed playerTwo, uint staked, uint deadline);
+    event LogGameCreated(bytes32 indexed gameId, address indexed playerOne, address indexed playerTwo, uint staked, uint deadline, uint blockNonce);    
     event LogGameRetired(bytes32 indexed gameId, address indexed winner, address indexed loser, uint pay, uint retireTimeStamp);
     event LogChoiceRevealed(bytes32 indexed gameId, address indexed revealer, Choice choice);
     event LogChoiceCommited(bytes32 indexed gameId, address indexed commiter, bytes32 hashedChoice);
@@ -45,21 +45,16 @@ contract RockPaperScissors {
         return keccak256(abi.encodePacked(choice, mask, msg.sender, address(this)));
     }
 
-    function createGame(address otherPlayer, bytes32 hashedChoice, uint256 gameLifetime, bool stakeFromWinnings) payable public {
+    function createGame(address otherPlayer, bytes32 hashedChoice, uint256 gameLifetime, uint blockNonce) payable public {
+        require(msg.value >= MIN_STAKE, "RockPaperScissors::createGame:Insufficient stake funds");        
         require(msg.sender != otherPlayer, "RockPaperScissors::createGame:Player addresses must be different");
-        bytes32 gameId = keccak256(abi.encodePacked(msg.sender, otherPlayer, block.number));
-
-        require(games[gameId].deadline == 0, "RockPaperScissors::createGame:An active game exists");
         require(hashedChoice != NULL_BYTES, "RockPaperScissors::play:Invalid hashedChoice value");
         require(gameLifetime >= MIN_GAME_LIFETIME,"RockPaperScissors::createGame:Invalid minimum game deadline");
-        require(gameLifetime <= MAX_GAME_LIFETIME,"RockPaperScissors::createGame:Invalid minimum game deadline");
-        
-        if(stakeFromWinnings){
-            require(winnings[msg.sender] >= MIN_STAKE, "RockPaperScissors::createGame:Insufficient stake funds in winnings");
-        }else{
-            require(msg.value >= MIN_STAKE, "RockPaperScissors::createGame:Insufficient stake funds");
-        }
+        require(gameLifetime <= MAX_GAME_LIFETIME,"RockPaperScissors::createGame:Invalid minimum game deadline");        
 
+        bytes32 gameId = keccak256(abi.encodePacked(msg.sender, otherPlayer, block.number, blockNonce));
+        require(games[gameId].deadline == 0, "RockPaperScissors::createGame:An active game exists with given inputs");
+        
         Game storage game = games[gameId];
         game.playerOne = msg.sender; //SSTORE
         game.playerTwo = otherPlayer; //SSTORE
@@ -68,29 +63,60 @@ contract RockPaperScissors {
         uint _gameDeadline = gameLifetime > MIN_GAME_LIFETIME ? gameLifetime.add(block.timestamp): DEFAULT_GAME_LIFETIME.add(block.timestamp);
         game.deadline = _gameDeadline; //SSTORE
         
-        emit LogGameCreated(gameId, msg.sender, otherPlayer, msg.value, _gameDeadline);
+        emit LogGameCreated(gameId, msg.sender, otherPlayer, msg.value, _gameDeadline, blockNonce);
+    }
+    
+    function createGameStakeFromWinnings(address otherPlayer, bytes32 hashedChoice, uint256 gameLifetime, uint stakeAmount, uint blockNonce) payable public {
+        require(msg.value == 0, "RockPaperScissors::createGameStakeFromWinnings:You should not desposit when staking from winnings");
+        require(stakeAmount >= MIN_STAKE, "RockPaperScissors::createGame:Invalid minumum stake amount");
+        require(winnings[msg.sender] >= stakeAmount, "RockPaperScissors::createGame:Insufficient stake funds in winnings");
+
+        require(msg.sender != otherPlayer, "RockPaperScissors::createGame:Player addresses must be different");
+        require(hashedChoice != NULL_BYTES, "RockPaperScissors::play:Invalid hashedChoice value");
+        require(gameLifetime >= MIN_GAME_LIFETIME,"RockPaperScissors::createGame:Invalid minimum game deadline");
+        require(gameLifetime <= MAX_GAME_LIFETIME,"RockPaperScissors::createGame:Invalid minimum game deadline");        
+        
+        bytes32 gameId = keccak256(abi.encodePacked(msg.sender, otherPlayer, block.number, blockNonce));
+        require(games[gameId].deadline == 0, "RockPaperScissors::createGame:An active game exists with given inputs");
+
+        Game storage game = games[gameId];
+        game.playerOne = msg.sender; //SSTORE
+        game.playerTwo = otherPlayer; //SSTORE
+
+        winnings[msg.sender].sub(stakeAmount);//SSTORE
+        game.stake = stakeAmount; //SSTORE
+                
+        uint _gameDeadline = gameLifetime > MIN_GAME_LIFETIME ? gameLifetime.add(block.timestamp): DEFAULT_GAME_LIFETIME.add(block.timestamp);
+        game.deadline = _gameDeadline; //SSTORE
+        
+        emit LogGameCreated(gameId, msg.sender, otherPlayer, msg.value, _gameDeadline, blockNonce);
     }
 
     function enrol(bytes32 gameId, bytes32 hashedChoice, bool stakeFromWinnings) public payable {
         require(gameId != NULL_BYTES, "RockPaperScissors::enrol:Invalid game id");
-        uint _deadline = games[gameId].deadline;
+        uint _deadline = games[gameId].deadline; //SSLOAD
         require(_deadline != 0, "RockPaperScissors::enrol:game does not exist");
-        require(block.timestamp <=_deadline, "RockPaperScissors::enrol:game has expired");
-        require(games[gameId].playerTwo == msg.sender, "RockPaperScissors::enrol:sender is not player");
-        require(games[gameId].commitOne != NULL_BYTES, "RockPaperScissors::enrol:Invalid game state, can't enroll");
+        require(block.timestamp <= _deadline, "RockPaperScissors::enrol:game has expired");
+        require(games[gameId].playerTwo == msg.sender, "RockPaperScissors::enrol:sender is not player"); //SSLOAD
+        require(games[gameId].commitOne != NULL_BYTES, "RockPaperScissors::enrol:Invalid game state, can't enroll"); //SSLOAD
 
-        uint stakeAmount = games[gameId].stake; 
+        uint stakeAmount = games[gameId].stake; //SSLOAD
         require(hashedChoice != NULL_BYTES, "RockPaperScissors::play:Invalid hashedChoice value");
 
         if(stakeFromWinnings){
-            require(winnings[msg.sender] >= stakeAmount, "RockPaperScissors::enrol:Insufficient stake funds in winnings");
+            require(msg.value == 0, "RockPaperScissors::enrol:You should not desposit when staking from winnings");
+            require(stakeAmount >= MIN_STAKE, "RockPaperScissors::enrol:Invalid minumum stake amount");
+            require(winnings[msg.sender] >= stakeAmount, "RockPaperScissors::enrol:Insufficient stake funds in winnings");             
+            winnings[msg.sender].sub(stakeAmount);//SSTORE
+            games[gameId].stake.add(stakeAmount); //SSTORE
         }else{
             require(msg.value >= stakeAmount, "RockPaperScissors::enrol:Insufficient stake funds");
+            games[gameId].stake.add(stakeAmount); //SSTORE
         }
         
-        games[gameId].commitTwo = hashedChoice; //SSTORE
-        games[gameId].stake += stakeAmount; //SSTORE
+        games[gameId].commitTwo = hashedChoice; //SSTORE        
         games[gameId].playerTwoIsEnrolled = true; //SSTORE
+
         emit LogChoiceCommited(gameId, msg.sender, hashedChoice);
     }
 
