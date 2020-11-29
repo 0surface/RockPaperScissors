@@ -10,16 +10,18 @@ contract RockPaperScissors {
     enum Choice  { None, Rock, Paper, Scissors }
     uint nextGameId;
 
+    struct GameMove {
+        bytes32 commit;
+        Choice choice;
+    }
+
     struct Game {
+        mapping(address => GameMove) gameMoves;
         address playerOne;
-        bytes32 commitOne;
-        Choice choiceOne;        
         address playerTwo;
-        bytes32 commitTwo;
-        Choice choiceTwo;
+        bool playerTwoIsNotEnrolled;
         uint stake;
         uint deadline;
-        bool playerTwoIsEnrolled;  
     }
 
     mapping (uint => Game) public games;
@@ -28,21 +30,23 @@ contract RockPaperScissors {
     uint constant public DEFAULT_GAME_LIFETIME = 1 days;
     uint constant public MAX_GAME_LIFETIME = 10 days;
     uint constant public MIN_GAME_LIFETIME = 1 minutes;
-    uint constant public MIN_STAKE = 0; //TODO: Set to dev/Game fee
+    uint constant public MIN_STAKE = 0;
     bytes32 constant public NULL_BYTES = bytes32(0);
 
-    event LogGameCreated(uint indexed gameId, address indexed playerOne, address indexed playerTwo, uint staked, uint deadline);    
-    event LogGameRetired(uint indexed gameId, address indexed winner, address indexed loser, uint pay, uint retireTimeStamp);
+    event LogGameCreated(uint indexed gameId, address indexed playerOne, address indexed playerTwo, uint staked, uint deadline, bool stakedFromWinnings);
+    event LogGameEnrolled(uint indexed gameId, address indexed commiter, bytes32 hashedChoice, bool stakedFromWinnings);    
     event LogChoiceRevealed(uint indexed gameId, address indexed revealer, Choice choice);
-    event LogChoiceCommited(uint indexed gameId, address indexed commiter, bytes32 hashedChoice);
-    event LogGameMovesTied(uint indexed gameId, Choice choiceOne, Choice choiceTwo);
-    event LogGameSettled(uint indexed gameId, address settler, uint pay, uint settlementTimeStamp);
+    event LogChoiceCommited(uint indexed gameId, address indexed commiter, bytes32 hashedChoice);    
+    event LogGameMovesTied(uint indexed gameId, Choice choice, uint timeStamp);
+    event LogGameFinished(uint indexed gameId, address indexed winner, address indexed loser, uint pay, uint retireTimeStamp);
+    event LogGameSettled(uint indexed gameId, address indexed settler, bool playerOnePayed, bool playerTwoPayed, uint pay, uint settlementTimeStamp);
+    event LogGameErased(uint indexed gameId, address eraser);
     event LogPayout(address indexed payee, uint pay);
 
     constructor (){}
     
     function generateChoice (Choice choice, bytes32 mask) view public returns (bytes32 hashedChoice) {
-        require(choice != Choice.None, "RockPaperScissors::generateChoice:Choice can not be none");
+        require(choice != Choice.None, "RockPaperScissors::generateChoice:Invalid Choice");
         require(mask != NULL_BYTES, "RockPaperScissors::generateChoice:mask can not be empty");
         return keccak256(abi.encodePacked(choice, mask, msg.sender, address(this)));
     }
@@ -64,27 +68,26 @@ contract RockPaperScissors {
             require(winnings[msg.sender] >= amountFromStake, "RockPaperScissors::createGameFromWinnings:Insufficient stake funds in winnings");
             winnings[msg.sender].sub(amountFromStake); //SSTORE
             game.stake = amountFromStake; //SSTORE
-        }else{
+        }else{  
             require(msg.value >= MIN_STAKE, "RockPaperScissors::createGame:Insufficient stake funds");
             game.stake = msg.value; //SSTORE
-        }        
-       
-        game.playerOne = msg.sender; //SSTORE
-        game.playerTwo = otherPlayer; //SSTORE        
-                
+        }
+
         uint _gameDeadline = gameLifetime > MIN_GAME_LIFETIME ? gameLifetime.add(block.timestamp): DEFAULT_GAME_LIFETIME.add(block.timestamp);
         game.deadline = _gameDeadline; //SSTORE
+        game.playerOne = msg.sender; //SSTORE
+        game.playerTwo = otherPlayer; //SSTORE 
+        game.playerTwoIsNotEnrolled = true; //SSTORE 
+        game.gameMoves[msg.sender] = GameMove({commit: hashedChoice, choice: Choice.None}); //SSTORE x 2 slots               
         
         nextGameId = nextGameId.add(1);
-        emit LogGameCreated(gameId, msg.sender, otherPlayer, msg.value, _gameDeadline);
+        emit LogGameCreated(gameId, msg.sender, otherPlayer, msg.value, _gameDeadline, stakeFromWinnings);
     }
 
-    function enrol(uint gameId, bytes32 hashedChoice, bool stakeFromWinnings) public payable {
-        uint _deadline = games[gameId].deadline; //SSLOAD
-        require(_deadline != 0, "RockPaperScissors::enrol:game does not exist");
-        require(block.timestamp <= _deadline, "RockPaperScissors::enrol:game has expired");
-        require(games[gameId].playerTwo == msg.sender, "RockPaperScissors::enrol:sender is not player"); //SSLOAD
-        require(games[gameId].commitOne != NULL_BYTES, "RockPaperScissors::enrol:Invalid game state, can't enroll"); //SSLOAD
+    function enrol(uint gameId, bytes32 hashedChoice, bool stakeFromWinnings) public payable {        
+        require(block.timestamp < games[gameId].deadline, "RockPaperScissors::play:game has expired (or does not exist)"); //SSLOAD
+        require(games[gameId].playerTwo == msg.sender , "RockPaperScissors::enrol:sender is not player"); //SSLOAD
+        require(games[gameId].playerTwoIsNotEnrolled, "RockPaperScissors::enrol:Second Player is already enrolled"); //SSLOAD
 
         uint amountToStake = games[gameId].stake; //SSLOAD
         require(hashedChoice != NULL_BYTES, "RockPaperScissors::play:Invalid hashedChoice value");
@@ -94,137 +97,139 @@ contract RockPaperScissors {
             require(amountToStake >= MIN_STAKE, "RockPaperScissors::enrol:Invalid minumum stake amount");
             require(winnings[msg.sender] >= amountToStake, "RockPaperScissors::enrol:Insufficient stake funds in winnings");             
             winnings[msg.sender].sub(amountToStake);//SSTORE
-            games[gameId].stake.add(amountToStake); //SSTORE
+            games[gameId].stake = games[gameId].stake.add(amountToStake); //SSTORE
         }else{
             require(msg.value >= amountToStake, "RockPaperScissors::enrol:Insufficient stake funds");
-            games[gameId].stake.add(amountToStake); //SSTORE
+            games[gameId].stake.add(amountToStake); //SSTORE        
         }
-        
-        games[gameId].commitTwo = hashedChoice; //SSTORE        
-        games[gameId].playerTwoIsEnrolled = true; //SSTORE
+
+        delete games[gameId].playerTwoIsNotEnrolled; //DELETE
+        games[gameId].gameMoves[msg.sender] = GameMove({commit: hashedChoice, choice:Choice.None}); //SSTORE x 2 slots
+
+        emit LogGameEnrolled(gameId, msg.sender, hashedChoice, stakeFromWinnings);
+    }
+
+    function commit(uint gameId, bytes32 hashedChoice) public {        
+        require(games[gameId].deadline > block.timestamp, "RockPaperScissors::commit:game has expired (or does not exist)"); //SSLOAD
+        require(games[gameId].gameMoves[msg.sender].choice == Choice.None, "RockPaperScissors::commit:sender is not a player"); //SSLOAD
+        require(games[gameId].gameMoves[msg.sender].commit == NULL_BYTES, "RockPaperScissors::commit:choice already been commited"); //SSLOAD
+        require(hashedChoice != NULL_BYTES, "RockPaperScissors::commit:Invalid commit value");
+
+        games[gameId].gameMoves[msg.sender].commit = hashedChoice; //SSTORE
 
         emit LogChoiceCommited(gameId, msg.sender, hashedChoice);
     }
 
-    function play(uint gameId,bytes32 hashedChoice) public {        
-        require(hashedChoice != NULL_BYTES, "RockPaperScissors::play:Invalid hashedChoice value");
-        
-        uint _deadline = games[gameId].deadline; //SSLOAD
-        require(_deadline != 0, "RockPaperScissors::play:game does not exist");
-        require(block.timestamp <=_deadline, "RockPaperScissors::play:game has expired");
-        require( games[gameId].playerTwoIsEnrolled, "RockPaperScissors::play:Player Two has not yet enrolled");
+    function reveal(uint gameId, Choice choice, bytes32 mask) public { 
+        require(block.timestamp < games[gameId].deadline, "RockPaperScissors::reveal:game has expired"); 
 
-        if(games[gameId].playerOne == msg.sender){ //SSLOAD
-            //SSLOAD            
-            require(games[gameId].commitOne == NULL_BYTES, "RockPaperScissors::play: You have already commited a choice");
-            games[gameId].commitOne = hashedChoice;  //SSTORE         
-        } 
-        else if(games[gameId].playerTwo == msg.sender){//SSLOAD
-            //SSLOAD            
-            require(games[gameId].commitTwo == NULL_BYTES, "RockPaperScissors::play:You have already commited a choice");
-            games[gameId].commitTwo = hashedChoice;  //SSTORE
-        }
-        else{
-            revert("RockPaperScissors::play:Sender is not a player");
-        }
-
-        emit LogChoiceCommited(gameId, msg.sender, hashedChoice);
-    }
-
-    function reveal(uint gameId, Choice choice, bytes32 mask) public returns (Choice) {
-        require(games[gameId].deadline != 0, "RockPaperScissors::reveal:game does not exist"); //SSLOAD        
-        bytes32 _commitTwo = games[gameId].commitTwo; //SSLOAD
-        bytes32 _commitOne = games[gameId].commitOne; //SSLOAD
-        require(_commitOne != NULL_BYTES &&  _commitTwo != NULL_BYTES, "RockPaperScissors::reveal:Commits have not been set yet");
-        
-        if(generateChoice(choice, mask) == _commitOne){
+        if(games[gameId].gameMoves[msg.sender].commit == generateChoice(choice, mask))
+        {
+            address counterParty = msg.sender == games[gameId].playerOne ? games[gameId].playerTwo : games[gameId].playerOne ; //SSLOAD            
+            bytes32 counterPartyCommit = games[gameId].gameMoves[counterParty].commit; //SSLOAD
             
-            Choice _choiceTwo = games[gameId].choiceTwo; //SSLOAD
-           
-            if(_choiceTwo == Choice.None){                
-                games[gameId].choiceOne = choice; //SSTORE
-                emit LogChoiceRevealed(gameId, msg.sender, choice);
-            }
-            else{
-                resolve(gameId,  choice, _choiceTwo);              
-            }
-        }else if(generateChoice(choice, mask) == _commitTwo){
-            Choice _choiceOne = games[gameId].choiceOne; //SSLOAD
-
-            if(_choiceOne == Choice.None){                
-                games[gameId].choiceTwo = choice; //SSTORE
+            require(counterPartyCommit != NULL_BYTES, "RockPaperScissors::reveal:Other Player has not commited yet");
+            Choice counterPartyChoice = games[gameId].gameMoves[counterParty].choice; //SSLOAD
+            
+            if(counterPartyChoice == Choice.None){                
+                games[gameId].gameMoves[msg.sender].choice = choice; //SSTORE
                 emit LogChoiceRevealed(gameId, msg.sender, choice);
             }
             else {
-                resolve(gameId, _choiceOne, choice);              
+               (bool gameOver, bool senderIsWinner) = resolve(choice, counterPartyChoice);
+               
+               gameOver ? gameTied(gameId, msg.sender,counterParty, choice)
+                        : senderIsWinner ? finish(gameId, msg.sender, counterParty) 
+                                         : finish(gameId, counterParty, msg.sender);
             }
-        }
-        else{
+        } else{
             revert("RockPaperScissors::reveal:Invalid mask and choice");
         }
     }
 
-    function retire(uint gameId, address winner, address loser) internal {
+    function finish(uint gameId, address winner, address loser) internal {
         uint pay = games[gameId].stake; //SSLOAD
-        winnings[winner].add(pay > 0 ? pay : 0); //SSTORE
-        delete games[gameId];
-
-        emit LogGameRetired(gameId, winner, loser, pay, block.timestamp);
+        winnings[winner] = winnings[winner].add(pay > 0 ? pay : 0); //SSTORE
+        erase(gameId);
+        emit LogGameFinished(gameId, winner, loser, pay, block.timestamp);
     }
 
+    /* @dev Determines winner or tie payments, retires game.
+        4 (+ 1) scenarios - 2 choice states (None, Revealed) x 2 players
+        (None, None) + playerTwoIsNotEnrolled => pay playerOne
+        (None, None) + !playerTwoIsNotEnrolled => pay both, 
+        (Revaled, None) => pay playerOne
+        (None, Revaled) => pay playerTwo        
+        (Revaled, Revaled) not possible on an expired game
+        @params gameId uint
+     */
     function settle(uint gameId) external {
-        require(block.timestamp > games[gameId].deadline);
+        require(block.timestamp > games[gameId].deadline, "RockPaperScissors::settle:Game has not yet expired");
         uint pay = games[gameId].stake; //SSLOAD
-        bool choiceOneRevealed = games[gameId].choiceOne == Choice.None; //SSLOAD
-        bool choiceTwoRevealed = games[gameId].choiceTwo == Choice.None; //SSLOAD
+
+        address playerOne = games[gameId].playerOne; //SSLOAD
+        address playerTwo = games[gameId].playerTwo; //SSLOAD
+        bool choiceOneRevealed = games[gameId].gameMoves[playerOne].choice == Choice.None; //SSLOAD
+        bool choiceTwoRevealed = games[gameId].gameMoves[playerTwo].choice == Choice.None; //SSLOAD
         
+        //1 has revealed, 2 has not OR 2 has not enrolled
         if(choiceOneRevealed && !choiceTwoRevealed) 
         {
-            winnings[games[gameId].playerOne].add(pay);
+            winnings[playerOne] = winnings[playerOne].add(pay); //SSTORE
+            LogGameSettled(gameId, msg.sender, true, false, pay, block.timestamp);
         }
-        else if (!choiceOneRevealed && choiceTwoRevealed) 
+        // 2 has revealed, 1 has not OR 1 is invalid, 2 is enrolled
+        else if(!choiceOneRevealed && choiceTwoRevealed) 
         {
-            winnings[games[gameId].playerTwo].add(pay);
+            winnings[playerTwo] = winnings[playerTwo].add(pay); //SSTORE
+            LogGameSettled(gameId, msg.sender, false, true, pay, block.timestamp);
         }
-        else if(!choiceOneRevealed && !choiceTwoRevealed){            
-            if(games[gameId].playerTwoIsEnrolled){
-                uint owed = pay.div(2); // pay is always an even number (or 0) ?
-                winnings[games[gameId].playerOne].add(owed); 
-                winnings[games[gameId].playerTwo].add(owed);   
-            }else{
-               winnings[games[gameId].playerOne].add(pay);               
+        else if(!choiceOneRevealed && !choiceTwoRevealed){
+            if(games[gameId].playerTwoIsNotEnrolled) //SSLOAD
+            {
+                winnings[playerOne] = winnings[playerOne].add(pay); //SSTORE
+                LogGameSettled(gameId, msg.sender, true, false, pay, block.timestamp);
             }
-        }else {
+            else
+            {
+                uint owed = pay.div(2); // pay is always an even number (or 0)
+                winnings[playerOne] = winnings[playerOne].add(owed); //SSTORE
+                winnings[playerTwo] = winnings[playerTwo].add(owed); //SSTORE
+                LogGameSettled(gameId, msg.sender, true, true, owed, block.timestamp);
+            }
+        }
+        else {         
             assert(false);
         }
 
-        delete games[gameId];
-        LogGameSettled(gameId, msg.sender, pay, block.timestamp);
+        erase(gameId);
+    }
+   
+    function gameTied(uint gameId, address playerOne, address playerTwo, Choice choice) internal {
+        delete games[gameId].gameMoves[playerOne].commit;
+        delete games[gameId].gameMoves[playerTwo].commit;
+        delete games[gameId].gameMoves[playerOne].choice;
+        delete games[gameId].gameMoves[playerTwo].choice;
+        emit LogGameMovesTied(gameId, choice, block.timestamp);
     }
 
-    function resolve(uint gameId, Choice choiceOne, Choice choiceTwo) internal {
-        if(choiceOne == choiceTwo) {
-            games[gameId].commitOne = NULL_BYTES; //SSTORE ? delete
-            games[gameId].choiceOne = Choice.None; //SSTORE
-            games[gameId].commitTwo = NULL_BYTES; //SSTORE
-            games[gameId].choiceTwo = Choice.None; //SSTORE
-            emit LogGameMovesTied( gameId, choiceOne, choiceTwo);
-            return;
+    function erase(uint gameId) private {
+        delete games[gameId];
+        emit LogGameErased(gameId, msg.sender);
+    }
+
+    function resolve(Choice senderChoice, Choice counterPartyChoice) internal pure returns (bool gameOver, bool senderIsWinner) {
+        if(senderChoice == counterPartyChoice) {
+           return (false, false);
         }else {
             /* Rock = 1, Paper = 2, Siccsors = 3
             _value = (first*10 + second) only in {12,13,21,23,31,32}
             {13,21,31} playerOne wins, 
             {12,23,31} playerTwo wins
              */
-            uint _value = (uint)(choiceOne).mul(10).add((uint)(choiceTwo));
+            uint _value = (uint)(senderChoice).mul(10).add((uint)(counterPartyChoice));
             
-            if(_value == 13 || _value == 21 || _value == 32){
-                retire(gameId, games[gameId].playerOne,  games[gameId].playerTwo); //SSLOAD, SSLOAD
-            }else if(_value == 12 || _value == 23 || _value == 31){
-                retire(gameId,  games[gameId].playerTwo, games[gameId].playerOne); //SSLOAD, SSLOAD
-            }else{
-                assert(false);
-            }
+            return (true,_value == 13 || _value == 21 || _value == 32);
         }
     }
 
