@@ -8,7 +8,7 @@ contract RockPaperScissors {
     using SafeMath for uint;
     
     enum Choice  { None, Rock, Paper, Scissors }
-    uint nextGameId;
+    uint public nextGameId;
 
     struct GameMove {
         bytes32 commit;
@@ -51,25 +51,25 @@ contract RockPaperScissors {
         return keccak256(abi.encodePacked(choice, mask, msg.sender, address(this)));
     }
 
-    function createGame(address otherPlayer, bytes32 hashedChoice, uint256 gameLifetime, bool stakeFromWinnings, uint amountFromStake) payable public {               
-        require(msg.sender != otherPlayer, "RockPaperScissors::createGame:Player addresses must be different");
+    function create(address otherPlayer, bytes32 hashedChoice, uint256 gameLifetime, bool stakeFromWinnings, uint amountFromStake) payable public {               
+        require(msg.sender != otherPlayer, "RockPaperScissors::create:Player addresses must be different");
         require(hashedChoice != NULL_BYTES, "RockPaperScissors::play:Invalid hashedChoice value");
-        require(gameLifetime >= MIN_GAME_LIFETIME,"RockPaperScissors::createGame:Invalid minimum game deadline");
-        require(gameLifetime <= MAX_GAME_LIFETIME,"RockPaperScissors::createGame:Invalid minimum game deadline");        
+        require(gameLifetime >= MIN_GAME_LIFETIME,"RockPaperScissors::create:Invalid minimum game deadline");
+        require(gameLifetime <= MAX_GAME_LIFETIME,"RockPaperScissors::create:Invalid minimum game deadline");        
 
         uint gameId = nextGameId;
-        require(games[gameId].deadline == 0, "RockPaperScissors::createGame:An active game exists with given inputs"); //SSLOAD
+        require(games[gameId].deadline == 0, "RockPaperScissors::create:An active game exists with given inputs"); //SSLOAD
         
         Game storage game = games[gameId];
 
         if(stakeFromWinnings){
-            require(msg.value == 0, "RockPaperScissors::createGame:Sent value should be 0 when staking from winnings");
-            require(amountFromStake >= MIN_STAKE, "RockPaperScissors::createGameFromWinnings:Invalid minumum stake amount");
-            require(winnings[msg.sender] >= amountFromStake, "RockPaperScissors::createGameFromWinnings:Insufficient stake funds in winnings");
+            require(msg.value == 0, "RockPaperScissors::create:Sent value should be 0 when staking from winnings");
+            require(amountFromStake >= MIN_STAKE, "RockPaperScissors::createFromWinnings:Invalid minumum stake amount");
+            require(winnings[msg.sender] >= amountFromStake, "RockPaperScissors::createFromWinnings:Insufficient stake funds in winnings");
             winnings[msg.sender] = winnings[msg.sender].sub(amountFromStake); //SSTORE
             game.stake = amountFromStake; //SSTORE
         }else{  
-            require(msg.value >= MIN_STAKE, "RockPaperScissors::createGame:Insufficient stake funds");
+            require(msg.value >= MIN_STAKE, "RockPaperScissors::create:Insufficient stake funds");
             game.stake = msg.value; //SSTORE
         }
 
@@ -77,7 +77,7 @@ contract RockPaperScissors {
         game.deadline = _gameDeadline; //SSTORE
         game.playerOne = msg.sender; //SSTORE
         game.playerTwo = otherPlayer; //SSTORE
-        game.gameMoves[msg.sender] = GameMove({commit: hashedChoice, choice: Choice.None}); //SSTORE x 2 slots               
+        game.gameMoves[msg.sender].commit =  hashedChoice; //SSTORE
         
         nextGameId = nextGameId.add(1);
         emit LogGameCreated(gameId, msg.sender, otherPlayer, msg.value, _gameDeadline, stakeFromWinnings);
@@ -103,7 +103,7 @@ contract RockPaperScissors {
         }
 
         games[gameId].playerTwoIsEnrolled = true; //SSTORE
-        games[gameId].gameMoves[msg.sender] = GameMove({commit: hashedChoice, choice:Choice.None}); //SSTORE x 2 slots
+        games[gameId].gameMoves[msg.sender].commit = hashedChoice; //SSTORE
 
         emit LogGameEnrolled(gameId, msg.sender, hashedChoice, stakeFromWinnings);
     }
