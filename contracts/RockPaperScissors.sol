@@ -35,14 +35,14 @@ contract RockPaperScissors {
     uint constant public MIN_STAKE = 0;
     bytes32 constant public NULL_BYTES = bytes32(0);
 
-    event LogGameCreated(uint indexed gameId, address indexed playerOne, address indexed playerTwo, uint staked, uint deadline, bool stakedFromWinnings);
-    event LogGameEnrolled(uint indexed gameId, address indexed commiter, bytes32 hashedChoice, bool stakedFromWinnings);
+    event LogGameCreated(uint indexed gameId, address indexed playerOne, address indexed playerTwo, bytes32 hashedChoice, uint deadline, uint lastCommitDeadline, bool stakedFromWinnings, uint staked);
+    event LogGameEnrolled(uint indexed gameId, address indexed commiter, bytes32 hashedChoice, bool stakedFromWinnings, uint staked);
     event LogChoiceCommited(uint indexed gameId, address indexed commiter, bytes32 hashedChoice);    
     event LogChoiceRevealed(uint indexed gameId, address indexed revealer, Choice choice);
     event LogGameTied(uint indexed gameId, Choice choice, uint timeStamp);
     event LogGameFinished(uint indexed gameId, address indexed winner, address indexed loser, uint pay, uint retireTimeStamp);
     event LogGameSettled(uint indexed gameId, address indexed settler, bool playerOnePayed, bool playerTwoPayed, uint pay, uint settlementTimeStamp);
-    event LogGameErased(uint indexed gameId, address eraser);
+    event LogGameErased(uint indexed gameId, address indexed eraser);
     event LogPayout(address indexed payee, uint pay);
 
     constructor (){}
@@ -81,16 +81,17 @@ contract RockPaperScissors {
         }         
         
         game.stake = amountToStake; //SSTORE
-
-        uint _gameDeadline = gameLifetime > MIN_GAME_LIFETIME ? gameLifetime.add(block.timestamp): DEFAULT_GAME_LIFETIME.add(block.timestamp);
-        game.deadline = _gameDeadline; //SSTORE
         game.playerOne = msg.sender; //SSTORE
         game.playerTwo = otherPlayer; //SSTORE
         game.gameMoves[msg.sender].commit =  hashedChoice; //SSTORE
-        game.lastCommitDeadline  = calculateLastCommitTimestamp(gameLifetime, _gameDeadline);
+        
+        uint _gameDeadline =  gameLifetime.add(block.timestamp);
+        uint _lastCommitDeadline = calculateLastCommitTimestamp(gameLifetime, _gameDeadline);
+        game.deadline = _gameDeadline; //SSTORE        
+        game.lastCommitDeadline = _lastCommitDeadline; //SSTORE
         
         nextGameId = nextGameId.add(1);
-        emit LogGameCreated(nextGameId, msg.sender, otherPlayer, msg.value, _gameDeadline, stakeFromWinnings);
+        emit LogGameCreated(nextGameId, msg.sender, otherPlayer, hashedChoice, _gameDeadline, _lastCommitDeadline, stakeFromWinnings, amountToStake);
     }
 
     function processStakeFromWinnings(uint sentValue, uint stake, uint minStake) internal view returns (uint newWinningsBalance, uint amountToStake){
@@ -122,7 +123,7 @@ contract RockPaperScissors {
         games[gameId].playerTwoIsEnrolled = true; //SSTORE
         games[gameId].gameMoves[msg.sender].commit = hashedChoice; //SSTORE
 
-        emit LogGameEnrolled(gameId, msg.sender, hashedChoice, stakeFromWinnings);
+        emit LogGameEnrolled(gameId, msg.sender, hashedChoice, stakeFromWinnings, amountToStake);
     }
 
     function commit(uint gameId, bytes32 hashedChoice) public {        
