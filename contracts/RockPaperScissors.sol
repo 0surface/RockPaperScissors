@@ -22,6 +22,7 @@ contract RockPaperScissors {
         bool playerTwoIsEnrolled;
         uint stake;
         uint deadline;
+        uint lastCommitDeadline;
     }
 
     mapping (uint => Game) public games;
@@ -29,7 +30,8 @@ contract RockPaperScissors {
 
     uint constant public DEFAULT_GAME_LIFETIME = 1 days;
     uint constant public MAX_GAME_LIFETIME = 10 days;
-    uint constant public MIN_GAME_LIFETIME = 1 minutes;
+    uint constant public MIN_GAME_LIFETIME = 1 hours;
+    uint constant public MIN_LAST_NO_COMMIT_WINDOW_PERCENTAGE = 10;
     uint constant public MIN_STAKE = 0;
     bytes32 constant public NULL_BYTES = bytes32(0);
 
@@ -44,6 +46,16 @@ contract RockPaperScissors {
     event LogPayout(address indexed payee, uint pay);
 
     constructor (){}
+
+    function calculateLastCommitTimestamp(uint256 gameLifetime, uint gameDeadline) pure public returns(uint lastCommitTimeStamp) {
+        if(gameLifetime >= MIN_GAME_LIFETIME && gameLifetime <= 3 hours){
+            return gameDeadline.sub(gameLifetime.div(30));
+        }else if(gameLifetime > 3 hours && gameLifetime <= 10 hours) {
+            return gameDeadline.sub(gameLifetime.div(20));
+        }else{
+            return gameDeadline.sub(gameLifetime.div(MIN_LAST_NO_COMMIT_WINDOW_PERCENTAGE));
+        }
+    }
     
     function generateChoice (Choice choice, bytes32 mask) view public returns (bytes32 hashedChoice) {
         require(choice != Choice.None, "RockPaperScissors::generateChoice:Invalid Choice");
@@ -75,6 +87,7 @@ contract RockPaperScissors {
         game.playerOne = msg.sender; //SSTORE
         game.playerTwo = otherPlayer; //SSTORE
         game.gameMoves[msg.sender].commit =  hashedChoice; //SSTORE
+        game.lastCommitDeadline  = calculateLastCommitTimestamp(gameLifetime, _gameDeadline);
         
         nextGameId = nextGameId.add(1);
         emit LogGameCreated(nextGameId, msg.sender, otherPlayer, msg.value, _gameDeadline, stakeFromWinnings);
@@ -113,7 +126,7 @@ contract RockPaperScissors {
     }
 
     function commit(uint gameId, bytes32 hashedChoice) public {        
-        require(games[gameId].deadline > block.timestamp, "RockPaperScissors::commit:game has expired (or does not exist)"); //SSLOAD
+        require(games[gameId].lastCommitDeadline > block.timestamp, "RockPaperScissors::commit:last commit deadline has expired (or game does not exist)"); //SSLOAD
         require(games[gameId].gameMoves[msg.sender].choice == Choice.None, "RockPaperScissors::commit:sender is not a player"); //SSLOAD
         require(games[gameId].gameMoves[msg.sender].commit == NULL_BYTES, "RockPaperScissors::commit:choice already been commited"); //SSLOAD
         require(hashedChoice != NULL_BYTES, "RockPaperScissors::commit:Invalid commit value");
@@ -211,10 +224,6 @@ contract RockPaperScissors {
         delete games[gameId].gameMoves[address2];
         delete games[gameId];
         emit LogGameErased(gameId, msg.sender);
-    }
-
-    function eraseGameMove(uint gameId) external {
-        delete games[gameId].gameMoves[msg.sender];
     }
 
     /* @dev resolve
