@@ -84,7 +84,7 @@ contract RockPaperScissors {
         game.playerOne = msg.sender; //SSTORE
         game.playerTwo = otherPlayer; //SSTORE
         game.gameMoves[msg.sender].commit =  hashedChoice; //SSTORE
-        
+
         uint _gameDeadline =  gameLifetime.add(block.timestamp);
         uint _lastCommitDeadline = calculateLastCommitTimestamp(gameLifetime, _gameDeadline);
         game.deadline = _gameDeadline; //SSTORE        
@@ -225,6 +225,10 @@ contract RockPaperScissors {
         delete games[gameId].gameMoves[address2];
         delete games[gameId];
         emit LogGameErased(gameId, msg.sender);
+    }
+
+    function getGameMove(uint gameId, address player) public view returns (bytes32 _commit, Choice choice) {
+        return (games[gameId].gameMoves[player].commit, games[gameId].gameMoves[player].choice);
     }
 
     /* @dev resolve
