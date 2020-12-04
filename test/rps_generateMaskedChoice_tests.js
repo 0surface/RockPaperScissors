@@ -1,0 +1,127 @@
+const RockPaperScissors = artifacts.require("RockPaperScissors");
+const truffleAssert = require("truffle-assertions");
+const chai = require("chai");
+const { assert } = chai;
+
+contract("RockPaperScissors", (accounts) => {
+  before(async () => {
+    it("TestRPC  must have adequate number of addresses", () => {
+      assert.isAtLeast(accounts.length, 3, "Test has enough addresses");
+    });
+  });
+
+  let rockPaperScissors;
+  let deployedInstanceAddress;
+  const CHOICE = {
+    NONE: 0,
+    ROCK: 1,
+    PAPER: 2,
+    SCISSORS: 3,
+  };
+  const deployer = accounts[0];
+  const playerOne = accounts[1];
+  const playerTwo = accounts[2];
+  const choiceMaskString = web3.utils.fromAscii("1c04ddc043e");
+  const NULL_BYTES = "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+  describe("generateChoice tests", () => {
+    beforeEach("deploy a fresh contract", async () => {
+      rockPaperScissors = await RockPaperScissors.new({ from: deployer });
+      deployedInstanceAddress = rockPaperScissors.address;
+    });
+
+    it("should generate a valid maskedChoice", async () => {
+      const maskingBlockHash = (await web3.eth.getBlock()).hash;
+      return rockPaperScissors.contract.methods
+        .generateMaskedChoice(CHOICE.ROCK, choiceMaskString, playerOne, maskingBlockHash)
+        .call({ from: playerOne })
+        .then((result) => {
+          assert.isDefined(result, "did not generate result");
+          assert.notEqual(result, NULL_BYTES, "generated invalid result");
+        });
+    });
+
+    it("should be able to generate result from web3 soliditySha3", async () => {
+      const maskingBlockHash = (await web3.eth.getBlock()).hash;
+      const web3SoliditySha3Value = web3.utils.soliditySha3(
+        { type: "uint8", value: CHOICE.ROCK },
+        { type: "bytes32", value: choiceMaskString },
+        { type: "address", value: playerOne },
+        { type: "address", value: deployedInstanceAddress },
+        { type: "bytes32", value: maskingBlockHash }
+      );
+      const soliditykeccak256Value = await rockPaperScissors.contract.methods
+        .generateMaskedChoice(CHOICE.ROCK, choiceMaskString, playerOne, maskingBlockHash)
+        .call({ from: playerOne });
+      assert.strictEqual(web3SoliditySha3Value, soliditykeccak256Value, "web3 and keccak256 generated value don't match");
+    });
+
+    it("should not generate same maskedChoice from two different callers", async () => {
+      const maskingBlockHash = (await web3.eth.getBlock()).hash;
+      const playerOneResult = await rockPaperScissors.contract.methods
+        .generateMaskedChoice(CHOICE.PAPER, choiceMaskString, playerOne, maskingBlockHash)
+        .call({ from: playerOne });
+
+      const playerTwoResult = await rockPaperScissors.contract.methods
+        .generateMaskedChoice(CHOICE.PAPER, choiceMaskString, playerTwo, maskingBlockHash)
+        .call({ from: playerTwo });
+      assert.notEqual(playerOneResult, playerTwoResult, "same value generated for different addresses");
+    });
+
+    it("should generate different values for different choices", async () => {
+      const maskingBlockHash = (await web3.eth.getBlock()).hash;
+      const hashedRock = await rockPaperScissors.contract.methods
+        .generateMaskedChoice(CHOICE.ROCK, choiceMaskString, playerOne, maskingBlockHash)
+        .call({ from: playerOne });
+      const hashedPaper = await rockPaperScissors.contract.methods
+        .generateMaskedChoice(CHOICE.PAPER, choiceMaskString, playerOne, maskingBlockHash)
+        .call({ from: playerOne });
+      const hashedScissors = await rockPaperScissors.contract.methods
+        .generateMaskedChoice(CHOICE.SCISSORS, choiceMaskString, playerOne, maskingBlockHash)
+        .call({ from: playerOne });
+
+      assert.notEqual(hashedRock, hashedPaper, "same maskedChoice generated for different addresses");
+      assert.notEqual(hashedPaper, hashedScissors, "same maskedChoice generated for different addresses");
+    });
+
+    it("should revert when given invalid choice", async () => {
+      const maskingBlockHash = (await web3.eth.getBlock()).hash;
+      await truffleAssert.reverts(
+        rockPaperScissors.contract.methods
+          .generateMaskedChoice(CHOICE.NONE, choiceMaskString, playerOne, maskingBlockHash)
+          .call({ from: playerOne }),
+        "RockPaperScissors::generateMaskedChoice:Invalid Choice"
+      );
+    });
+
+    it("should revert when given empty mask", async () => {
+      const maskingBlockHash = (await web3.eth.getBlock()).hash;
+      await truffleAssert.reverts(
+        rockPaperScissors.contract.methods
+          .generateMaskedChoice(CHOICE.PAPER, NULL_BYTES, playerOne, maskingBlockHash)
+          .call({ from: playerOne }),
+        "RockPaperScissors::generateMaskedChoice:mask can not be empty"
+      );
+    });
+
+    it("should revert when given empty maskingBlockHash", async () => {
+      const maskingBlockHash = (await web3.eth.getBlock()).hash;
+      await truffleAssert.reverts(
+        rockPaperScissors.contract.methods
+          .generateMaskedChoice(CHOICE.ROCK, choiceMaskString, playerOne, NULL_BYTES)
+          .call({ from: playerOne }),
+        "RockPaperScissors::generateMaskedChoice:Invalid maskingBlockHash"
+      );
+    });
+
+    it("should revert when mask and maskingBlockHash are the same", async () => {
+      const maskingBlockHash = (await web3.eth.getBlock()).hash;
+      await truffleAssert.reverts(
+        rockPaperScissors.contract.methods
+          .generateMaskedChoice(CHOICE.SCISSORS, maskingBlockHash, playerOne, maskingBlockHash)
+          .call({ from: playerOne }),
+        "RockPaperScissors::generateMaskedChoice:mask and maskingBlockHash can not be the same"
+      );
+    });
+  });
+});

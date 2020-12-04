@@ -35,9 +35,9 @@ contract RockPaperScissors {
     uint constant public MIN_STAKE = 0;
     bytes32 constant public NULL_BYTES = bytes32(0);
 
-    event LogGameCreated(uint indexed gameId, address indexed playerOne, address indexed playerTwo, bytes32 hashedChoice, uint deadline, uint lastCommitDeadline, bool stakedFromWinnings, uint staked);
-    event LogGameEnrolled(uint indexed gameId, address indexed commiter, bytes32 hashedChoice, bool stakedFromWinnings, uint staked);
-    event LogChoiceCommited(uint indexed gameId, address indexed commiter, bytes32 hashedChoice);    
+    event LogGameCreated(uint indexed gameId, address indexed playerOne, address indexed playerTwo, bytes32 maskedChoice, uint deadline, uint lastCommitDeadline, bool stakedFromWinnings, uint staked);
+    event LogGameEnrolled(uint indexed gameId, address indexed commiter, bytes32 maskedChoice, bool stakedFromWinnings, uint staked);
+    event LogChoiceCommited(uint indexed gameId, address indexed commiter, bytes32 maskedChoice);    
     event LogChoiceRevealed(uint indexed gameId, address indexed revealer, Choice choice);
     event LogGameTied(uint indexed gameId, Choice choice, uint timeStamp);
     event LogGameFinished(uint indexed gameId, address indexed winner, address indexed loser, uint pay, uint retireTimeStamp);
@@ -57,19 +57,20 @@ contract RockPaperScissors {
         }
     }
     
-    function generateChoice (Choice choice, bytes32 mask) view public returns (bytes32 hashedChoice) {
-        require(choice != Choice.None, "RockPaperScissors::generateChoice:Invalid Choice");
-        require(mask != NULL_BYTES, "RockPaperScissors::generateChoice:mask can not be empty");
-        return keccak256(abi.encodePacked(choice, mask, msg.sender, address(this)));
+    function generateMaskedChoice (Choice choice, bytes32 mask, address masker, uint blockTimestamp) public view returns (bytes32 maskedChoice) {
+        require(choice != Choice.None, "RockPaperScissors::generateMaskedChoice:Invalid Choice");
+        require(mask != NULL_BYTES, "RockPaperScissors::generateMaskedChoice:mask can not be empty");
+        require(block.timestamp >= blockTimestamp && blockTimestamp > 0, "RockPaperScissors::generateMaskedChoice:Invalid blockTimestamp");
+        
+        return keccak256(abi.encodePacked(choice, mask, masker, blockTimestamp, address(this)));
     }
 
-    function create(address otherPlayer, bytes32 hashedChoice, uint256 gameLifetime, bool stakeFromWinnings, uint stake) payable public {               
+    function create(address otherPlayer, bytes32 maskedChoice, uint256 gameLifetime, bool stakeFromWinnings, uint stake) payable public {               
         require(msg.sender != otherPlayer, "RockPaperScissors::create:Player addresses must be different");
-        require(hashedChoice != NULL_BYTES, "RockPaperScissors::play:Invalid hashedChoice value");
+        require(maskedChoice != NULL_BYTES, "RockPaperScissors::play:Invalid maskedChoice value");
         require(gameLifetime >= MIN_GAME_LIFETIME,"RockPaperScissors::create:Invalid minimum game deadline");
         require(gameLifetime <= MAX_GAME_LIFETIME,"RockPaperScissors::create:Invalid maximum game deadline");
-
-        Game storage game = games[nextGameId];
+       
         uint amountToStake = msg.value;
 
         if(stakeFromWinnings) {       
@@ -80,18 +81,20 @@ contract RockPaperScissors {
             require(amountToStake >= MIN_STAKE, "RockPaperScissors::create:Invalid minumum stake amount");
         }         
         
+        uint id = nextGameId.add(1); //SLOAD
+        Game storage game = games[id];
+
         game.stake = amountToStake; //SSTORE
         game.playerOne = msg.sender; //SSTORE
         game.playerTwo = otherPlayer; //SSTORE
-        game.gameMoves[msg.sender].commit =  hashedChoice; //SSTORE
+        game.gameMoves[msg.sender].commit =  maskedChoice; //SSTORE
 
         uint _gameDeadline =  gameLifetime.add(block.timestamp);
         uint _lastCommitDeadline = calculateLastCommitTimestamp(gameLifetime, _gameDeadline);
         game.deadline = _gameDeadline; //SSTORE        
-        game.lastCommitDeadline = _lastCommitDeadline; //SSTORE
+        game.lastCommitDeadline = _lastCommitDeadline; //SSTORE        
         
-        nextGameId = nextGameId.add(1);
-        emit LogGameCreated(nextGameId, msg.sender, otherPlayer, hashedChoice, _gameDeadline, _lastCommitDeadline, stakeFromWinnings, amountToStake);
+        emit LogGameCreated(id, msg.sender, otherPlayer, maskedChoice, _gameDeadline, _lastCommitDeadline, stakeFromWinnings, amountToStake);
     }
 
     function processStakeFromWinnings(uint sentValue, uint stake, uint minStake) internal view returns (uint newWinningsBalance, uint amountToStake){
@@ -102,11 +105,11 @@ contract RockPaperScissors {
         return(_newWinningsBalance, _stake);
     }    
 
-    function enrol(uint gameId, bytes32 hashedChoice, bool stakeFromWinnings, uint stake) public payable {        
+    function enrol(uint gameId, bytes32 maskedChoice, bool stakeFromWinnings, uint stake) public payable {        
         require(block.timestamp < games[gameId].deadline, "RockPaperScissors::play:game has expired (or does not exist)"); //SSLOAD
         require(games[gameId].playerTwo == msg.sender , "RockPaperScissors::enrol:sender is not player"); //SSLOAD
         require(!games[gameId].playerTwoIsEnrolled, "RockPaperScissors::enrol:Second Player is already enrolled"); //SSLOAD
-        require(hashedChoice != NULL_BYTES, "RockPaperScissors::play:Invalid hashedChoice value");
+        require(maskedChoice != NULL_BYTES, "RockPaperScissors::play:Invalid maskedChoice value");
 
         uint stakedInGame = games[gameId].stake; //SSLOAD
         uint amountToStake  = msg.value;
@@ -121,25 +124,25 @@ contract RockPaperScissors {
         
         games[gameId].stake = amountToStake; //SSTORE
         games[gameId].playerTwoIsEnrolled = true; //SSTORE
-        games[gameId].gameMoves[msg.sender].commit = hashedChoice; //SSTORE
+        games[gameId].gameMoves[msg.sender].commit = maskedChoice; //SSTORE
 
-        emit LogGameEnrolled(gameId, msg.sender, hashedChoice, stakeFromWinnings, amountToStake);
+        emit LogGameEnrolled(gameId, msg.sender, maskedChoice, stakeFromWinnings, amountToStake);
     }
 
-    function commit(uint gameId, bytes32 hashedChoice) public {        
+    function commit(uint gameId, bytes32 maskedChoice) public {        
         require(games[gameId].lastCommitDeadline > block.timestamp, "RockPaperScissors::commit:last commit deadline has expired (or game does not exist)"); //SSLOAD
         require(games[gameId].gameMoves[msg.sender].choice == Choice.None, "RockPaperScissors::commit:sender is not a player"); //SSLOAD
         require(games[gameId].gameMoves[msg.sender].commit == NULL_BYTES, "RockPaperScissors::commit:choice already been commited"); //SSLOAD
-        require(hashedChoice != NULL_BYTES, "RockPaperScissors::commit:Invalid commit value");
+        require(maskedChoice != NULL_BYTES, "RockPaperScissors::commit:Invalid commit value");
 
-        games[gameId].gameMoves[msg.sender].commit = hashedChoice; //SSTORE
+        games[gameId].gameMoves[msg.sender].commit = maskedChoice; //SSTORE
 
-        emit LogChoiceCommited(gameId, msg.sender, hashedChoice);
+        emit LogChoiceCommited(gameId, msg.sender, maskedChoice);
     }
 
-    function reveal(uint gameId, Choice choice, bytes32 mask) public { 
+    function reveal(uint gameId, Choice choice, bytes32 mask,  uint maskingTimestamp) public { 
         require(block.timestamp < games[gameId].deadline, "RockPaperScissors::reveal:game has expired");   //SSLOAD
-        require(games[gameId].gameMoves[msg.sender].commit == generateChoice(choice, mask), "RockPaperScissors::reveal:Invalid mask and choice");  //SSLOAD
+        require(games[gameId].gameMoves[msg.sender].commit == generateMaskedChoice(choice, mask, msg.sender, maskingTimestamp), "RockPaperScissors::reveal:Invalid mask and choice");  //SSLOAD
         
         address _counterParty = msg.sender == games[gameId].playerOne ? games[gameId].playerTwo : games[gameId].playerOne ; //SSLOAD            
         bytes32 counterPartyCommit = games[gameId].gameMoves[_counterParty].commit; //SSLOAD
@@ -157,8 +160,7 @@ contract RockPaperScissors {
             _gameOver ? _senderIsWinner ? finish(gameId, msg.sender, _counterParty) 
                                         : finish(gameId, _counterParty, msg.sender) 
                         :resolveTiedGame(gameId, msg.sender, _counterParty, choice);
-        }
-        
+        }        
     }
 
     function resolveTiedGame(uint gameId, address playerOne, address playerTwo, Choice choice) internal {
