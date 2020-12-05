@@ -237,16 +237,15 @@ contract RockPaperScissors {
         require(success, "payout failed");
     }
 
-    /*@dev computes commit deadline timestamp value
-    994 provides a commit deadline of 
-        COMMIT_WINDOW_DIVIDER = 873 ~ MAX_GAME_LIFETIME.div(994).add(4) for MAX_GAME_LIFETIME = 10 days
-        *! The calculation and numbers will change as MAX_GAME_LIFETIME is changed !*
-        ~ 15 min         @ gameLifetime = MAX_GAME_LIFETIME = 10 days
-        ~ 15 min (25%)   @ gameLifetime = MIN_GAME_LIFETIME = 1 hours;
+    /*@dev computes commit deadline timestamp value    
+        result = gameDeadline - (300 + ((gameLifetime/ 1000) + 3)) seconds        
+        * the 300 seconds is an offset, can be adjusted to a desired value
+        ~21 min        @ gameLifetime = MAX_GAME_LIFETIME = 10 days
+        15 min         @ gameLifetime = MIN_GAME_LIFETIME = 1 hours;
         Intermediate Commit deadline values are approximately 
         15 minutes (900 seconds) with a variance of 90 seconds
     */
-    function calculateLastCommitTimestamp(uint256 gameLifetime, uint gameDeadline) pure public returns(uint lastCommitTimeStamp) {        
-        return gameDeadline.sub(gameLifetime.div(COMMIT_WINDOW_DIVIDER));       
+    function calculateLastCommitTimestamp(uint256 gameLifetime, uint gameDeadline) pure public returns(uint lastCommitTimeStamp) {                      
+        return gameDeadline.sub(gameLifetime.div(gameLifetime.div(1000).add(3)).add(300));       
     }
 }
