@@ -65,21 +65,16 @@ contract RockPaperScissors {
         return keccak256(abi.encodePacked(choice, mask, masker, blockTimestamp, address(this)));
     }
 
-    function create(address otherPlayer, bytes32 maskedChoice, uint256 gameLifetime, bool stakeFromWinnings, uint stake) payable public {               
+    function createAndCommit(address otherPlayer, bytes32 maskedChoice, uint256 gameLifetime/*, bool stakeFromWinnings, uint stake*/) payable public {               
         require(msg.sender != otherPlayer, "RockPaperScissors::create:Player addresses must be different");
         require(maskedChoice != NULL_BYTES, "RockPaperScissors::play:Invalid maskedChoice value");
         require(gameLifetime >= MIN_GAME_LIFETIME,"RockPaperScissors::create:Invalid minimum game deadline");
-        require(gameLifetime <= MAX_GAME_LIFETIME,"RockPaperScissors::create:Invalid maximum game deadline");
-       
-        uint amountToStake = msg.value;
-
-        if(stakeFromWinnings) {       
-            (uint _newWinningsBalance, uint _amountToStake) = processStakeFromWinnings(amountToStake, stake, MIN_STAKE);            
-            winnings[msg.sender] = _newWinningsBalance; //SSTORE  
-            amountToStake = _amountToStake;           
-        }else{
-            require(amountToStake >= MIN_STAKE, "RockPaperScissors::create:Invalid minumum stake amount");
-        }         
+        require(gameLifetime <= MAX_GAME_LIFETIME,"RockPaperScissors::create:Invalid maximum game deadline");       
+        
+        uint winningsBalance = winnings[msg.sender]; //SLOAD
+        (bool isEligible,  uint amountToStake, uint newWinningsBalance, bool stakeFromWinnings) = processStake(msg.value, winningsBalance, MIN_STAKE);  //SLOAD    
+        require(isEligible, "RockPaperScissors::create:Insuffcient balance to stake");
+        if(stakeFromWinnings) { winnings[msg.sender] = newWinningsBalance; } //SSTORE
         
         uint id = nextGameId.add(1); //SLOAD
         Game storage game = games[id];
@@ -97,30 +92,29 @@ contract RockPaperScissors {
         emit LogGameCreated(id, msg.sender, otherPlayer, maskedChoice, _gameDeadline, _lastCommitDeadline, stakeFromWinnings, amountToStake);
     }
 
-    function processStakeFromWinnings(uint sentValue, uint stake, uint minStake) internal view returns (uint newWinningsBalance, uint amountToStake){
-        uint _stake = stake >= 0 ? stake : -stake; //ABS value of stake
-        uint diff = sentValue.sub(_stake); 
-        uint _newWinningsBalance = winnings[msg.sender].add(diff);  //SSLOAD
-        require(_newWinningsBalance >= 0  && _stake >= minStake, "RockPaperScissors::create:Insuffcient balance to stake");
-        return(_newWinningsBalance, _stake);
-    }    
+     function processStake(uint sentValue, uint winingsBalance, uint minimumStake) 
+        internal pure 
+        returns (bool isEligible,  uint amountToStake, uint newWinningsBalance, bool stakeFromWinnings)
+    {
+        uint diff = sentValue.sub(minimumStake);        
+        newWinningsBalance = winingsBalance.add(diff); 
+        isEligible = (newWinningsBalance >= 0  || sentValue >= minimumStake);        
+        stakeFromWinnings = diff < 0;
+        amountToStake = stakeFromWinnings ? sentValue :  sentValue.add(-diff);
+    }  
 
-    function enrol(uint gameId, bytes32 maskedChoice, bool stakeFromWinnings, uint stake) public payable {        
+    function enrolAndCommit(uint gameId, bytes32 maskedChoice/*, bool stakeFromWinnings, uint stake */) public payable {        
         require(block.timestamp < games[gameId].deadline, "RockPaperScissors::play:game has expired (or does not exist)"); //SSLOAD
         require(games[gameId].playerTwo == msg.sender , "RockPaperScissors::enrol:sender is not player"); //SSLOAD
         require(!games[gameId].playerTwoIsEnrolled, "RockPaperScissors::enrol:Second Player is already enrolled"); //SSLOAD
         require(maskedChoice != NULL_BYTES, "RockPaperScissors::play:Invalid maskedChoice value");
-
+        
+        uint winningsBalance = winnings[msg.sender]; //SLOAD
         uint stakedInGame = games[gameId].stake; //SSLOAD
-        uint amountToStake  = msg.value;
 
-        if(stakeFromWinnings) {       
-            (uint _newWinningsBalance, uint _amountToStake) = processStakeFromWinnings(amountToStake, stake, stakedInGame);            
-            winnings[msg.sender] = _newWinningsBalance; //SSTORE  
-            amountToStake = _amountToStake;           
-        }else{
-            require(amountToStake >= stakedInGame, "RockPaperScissors::create:Invalid minumum stake amount");
-        }    
+        (bool isEligible, uint amountToStake, uint newWinningsBalance, bool stakeFromWinnings) = processStake(msg.value, winningsBalance, stakedInGame);  //SLOAD    
+        require(isEligible, "RockPaperScissors::create:Insuffcient balance to stake");
+        if(stakeFromWinnings) { winnings[msg.sender] = newWinningsBalance; } //SSTORE 
         
         games[gameId].stake = amountToStake; //SSTORE
         games[gameId].playerTwoIsEnrolled = true; //SSTORE
@@ -131,8 +125,8 @@ contract RockPaperScissors {
 
     function commit(uint gameId, bytes32 maskedChoice) public {        
         require(games[gameId].lastCommitDeadline > block.timestamp, "RockPaperScissors::commit:last commit deadline has expired (or game does not exist)"); //SSLOAD
-        require(games[gameId].gameMoves[msg.sender].choice == Choice.None, "RockPaperScissors::commit:sender is not a player"); //SSLOAD
         require(games[gameId].gameMoves[msg.sender].commit == NULL_BYTES, "RockPaperScissors::commit:choice already been commited"); //SSLOAD
+        require(games[gameId].gameMoves[msg.sender].choice == Choice.None, "RockPaperScissors::commit:sender is not a player"); //SSLOAD        
         require(maskedChoice != NULL_BYTES, "RockPaperScissors::commit:Invalid commit value");
 
         games[gameId].gameMoves[msg.sender].commit = maskedChoice; //SSTORE

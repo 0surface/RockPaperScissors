@@ -28,7 +28,7 @@ contract("RockPaperScissors", (accounts) => {
   const choiceMaskString = web3.utils.fromAscii("1c04ddc043e");
   const _nullMaskValue = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
-  describe("create tests", () => {
+  describe("createandcommit tests", () => {
     beforeEach("deploy a fresh contract, generate a choice", async () => {
       rockPaperScissors = await RockPaperScissors.new({ from: deployer });
       deployedInstanceAddress = rockPaperScissors.address;
@@ -42,7 +42,7 @@ contract("RockPaperScissors", (accounts) => {
       const gameIdCountBefore = await rockPaperScissors.nextGameId.call();
 
       const txObj = await rockPaperScissors.contract.methods
-        .create(playerTwo, hashedChoice_1, gameLifeTime, false, 0)
+        .createandcommit(playerTwo, hashedChoice_1, gameLifeTime, false, 0)
         .send({ from: playerOne, value: 10000, gas: gas });
       const gameIdCountAfter = await rockPaperScissors.nextGameId.call();
 
