@@ -13,7 +13,7 @@ contract RockPaperScissors {
     struct GameMove {
         bytes32 commit;
         Choice choice;
-    }
+    }   
 
     struct Game {
         mapping(address => GameMove) gameMoves;
@@ -31,7 +31,7 @@ contract RockPaperScissors {
     uint constant public DEFAULT_GAME_LIFETIME = 1 days;
     uint constant public MAX_GAME_LIFETIME = 10 days;
     uint constant public MIN_GAME_LIFETIME = 1 hours;
-    uint constant public MIN_LAST_NO_COMMIT_WINDOW_PERCENTAGE = 10;
+    uint constant public COMMIT_WINDOW_DIVIDER = 873;
     uint constant public MIN_STAKE = 0;
     bytes32 constant public NULL_BYTES = bytes32(0);
 
@@ -47,16 +47,6 @@ contract RockPaperScissors {
 
     constructor (){}
 
-    function calculateLastCommitTimestamp(uint256 gameLifetime, uint gameDeadline) pure public returns(uint lastCommitTimeStamp) {
-        if(gameLifetime >= MIN_GAME_LIFETIME && gameLifetime <= 3 hours){
-            return gameDeadline.sub(gameLifetime.div(30));
-        }else if(gameLifetime > 3 hours && gameLifetime <= 10 hours) {
-            return gameDeadline.sub(gameLifetime.div(20));
-        }else{
-            return gameDeadline.sub(gameLifetime.div(MIN_LAST_NO_COMMIT_WINDOW_PERCENTAGE));
-        }
-    }
-    
     function generateMaskedChoice (Choice choice, bytes32 mask, address masker, uint blockTimestamp) public view returns (bytes32 maskedChoice) {
         require(choice != Choice.None, "RockPaperScissors::generateMaskedChoice:Invalid Choice");
         require(mask != NULL_BYTES, "RockPaperScissors::generateMaskedChoice:mask can not be empty");
@@ -66,14 +56,14 @@ contract RockPaperScissors {
     }
 
     function createAndCommit(address otherPlayer, bytes32 maskedChoice, uint256 gameLifetime/*, bool stakeFromWinnings, uint stake*/) payable public {               
-        require(msg.sender != otherPlayer, "RockPaperScissors::create:Player addresses must be different");
-        require(maskedChoice != NULL_BYTES, "RockPaperScissors::play:Invalid maskedChoice value");
-        require(gameLifetime >= MIN_GAME_LIFETIME,"RockPaperScissors::create:Invalid minimum game deadline");
-        require(gameLifetime <= MAX_GAME_LIFETIME,"RockPaperScissors::create:Invalid maximum game deadline");       
+        require(msg.sender != otherPlayer, "RockPaperScissors::createAndCommit:Player addresses must be different");
+        require(maskedChoice != NULL_BYTES, "RockPaperScissors::createAndCommit:Invalid maskedChoice value");
+        require(gameLifetime >= MIN_GAME_LIFETIME,"RockPaperScissors::createAndCommit:Invalid minimum game deadline");
+        require(gameLifetime <= MAX_GAME_LIFETIME,"RockPaperScissors::createAndCommit:Invalid maximum game deadline");       
         
         uint winningsBalance = winnings[msg.sender]; //SLOAD
         (bool isEligible,  uint amountToStake, uint newWinningsBalance, bool stakeFromWinnings) = processStake(msg.value, winningsBalance, MIN_STAKE);  //SLOAD    
-        require(isEligible, "RockPaperScissors::create:Insuffcient balance to stake");
+        require(isEligible, "RockPaperScissors::createAndCommit:Insuffcient balance to stake");
         if(stakeFromWinnings) { winnings[msg.sender] = newWinningsBalance; } //SSTORE
         
         uint id = nextGameId.add(1); //SLOAD
@@ -104,16 +94,16 @@ contract RockPaperScissors {
     }  
 
     function enrolAndCommit(uint gameId, bytes32 maskedChoice/*, bool stakeFromWinnings, uint stake */) public payable {        
-        require(block.timestamp < games[gameId].deadline, "RockPaperScissors::play:game has expired (or does not exist)"); //SSLOAD
-        require(games[gameId].playerTwo == msg.sender , "RockPaperScissors::enrol:sender is not player"); //SSLOAD
-        require(!games[gameId].playerTwoIsEnrolled, "RockPaperScissors::enrol:Second Player is already enrolled"); //SSLOAD
-        require(maskedChoice != NULL_BYTES, "RockPaperScissors::play:Invalid maskedChoice value");
+        require(block.timestamp < games[gameId].deadline, "RockPaperScissors::enrolAndCommit:game has expired (or does not exist)"); //SSLOAD
+        require(games[gameId].playerTwo == msg.sender , "RockPaperScissors::enrolAndCommit:sender is not player"); //SSLOAD
+        require(!games[gameId].playerTwoIsEnrolled, "RockPaperScissors::enrolAndCommit:Second Player is already enrolled"); //SSLOAD
+        require(maskedChoice != NULL_BYTES, "RockPaperScissors::enrolAndCommit:Invalid maskedChoice value");
         
         uint winningsBalance = winnings[msg.sender]; //SLOAD
         uint stakedInGame = games[gameId].stake; //SSLOAD
 
         (bool isEligible, uint amountToStake, uint newWinningsBalance, bool stakeFromWinnings) = processStake(msg.value, winningsBalance, stakedInGame);  //SLOAD    
-        require(isEligible, "RockPaperScissors::create:Insuffcient balance to stake");
+        require(isEligible, "RockPaperScissors::enrolAndCommit:Insuffcient balance to stake");
         if(stakeFromWinnings) { winnings[msg.sender] = newWinningsBalance; } //SSTORE 
         
         games[gameId].stake = amountToStake; //SSTORE
@@ -245,5 +235,18 @@ contract RockPaperScissors {
         LogPayout(msg.sender, pay);
         (bool success, ) = (msg.sender).call{value: pay}("");        
         require(success, "payout failed");
+    }
+
+    /*@dev computes commit deadline timestamp value
+    994 provides a commit deadline of 
+        COMMIT_WINDOW_DIVIDER = 873 ~ MAX_GAME_LIFETIME.div(994).add(4) for MAX_GAME_LIFETIME = 10 days
+        *! The calculation and numbers will change as MAX_GAME_LIFETIME is changed !*
+        ~ 15 min         @ gameLifetime = MAX_GAME_LIFETIME = 10 days
+        ~ 15 min (25%)   @ gameLifetime = MIN_GAME_LIFETIME = 1 hours;
+        Intermediate Commit deadline values are approximately 
+        15 minutes (900 seconds) with a variance of 90 seconds
+    */
+    function calculateLastCommitTimestamp(uint256 gameLifetime, uint gameDeadline) pure public returns(uint lastCommitTimeStamp) {        
+        return gameDeadline.sub(gameLifetime.div(COMMIT_WINDOW_DIVIDER));       
     }
 }
