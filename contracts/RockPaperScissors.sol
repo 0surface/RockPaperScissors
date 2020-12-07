@@ -50,7 +50,7 @@ contract RockPaperScissors {
     function generateMaskedChoice (Choice choice, bytes32 mask, address masker, uint blockTimestamp) public view returns (bytes32 maskedChoice) {
         require(choice != Choice.None, "RockPaperScissors::generateMaskedChoice:Invalid Choice");
         require(mask != NULL_BYTES, "RockPaperScissors::generateMaskedChoice:mask can not be empty");
-        require(block.timestamp >= blockTimestamp && blockTimestamp > 0, "RockPaperScissors::generateMaskedChoice:Invalid blockTimestamp");
+        require(blockTimestamp > block.timestamp.sub(MAX_GAME_LIFETIME.mul(2)), "RockPaperScissors::generateMaskedChoice:Invalid blockTimestamp");
         
         return keccak256(abi.encodePacked(choice, mask, masker, blockTimestamp, address(this)));
     }
