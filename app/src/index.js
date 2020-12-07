@@ -5,6 +5,7 @@ const rockPaperScissorsJson = require("../../build/contracts/RockPaperScissors.j
 
 const App = {
   web3: null,
+  activeAccount: null,
   wallets: [],
   rockPaperScissors: truffleContract(rockPaperScissorsJson),
 
@@ -19,6 +20,24 @@ const App = {
     }
   },
 
+  create: async function () {
+    if (!this.validateCreate()) return;
+    $("#btnCreate").prop("disabled", false);
+  },
+
+  validateCreate: async function () {
+    const _opponent = $("#create_opponent").val();
+    const _stake = $("#create_stake").val();
+    const _stakeFrom = $("#create_stakeSource").val();
+    const _chosenMove = $("#create_chosen").val();
+    const _days = $("#gameDays").val();
+    const _hours = $("#gameHours").val();
+    const _minutes = $("#gameMinutes").val();
+    const hasError = false;
+
+    return hasError;
+  },
+
   showContractBalance: async function () {
     const deployed = await this.rockPaperScissors.deployed();
     const balanceInWei = await this.web3.eth.getBalance(deployed.address);
@@ -26,10 +45,49 @@ const App = {
     $("#contractBalance").html(`${parseFloat(balanceInEther).toFixed(4)} ETH`);
   },
 
+  choiceSelected: function (id) {
+    console.log(id);
+    console.log("grp ", $("#create_choices button"));
+    $("#create_choices button").removeClass("btn-success").addClass("btn-secondary");
+    const chosenElem = $(`#${id}`);
+    chosenElem.addClass("btn-success");
+
+    console.log("chosenElem.name", chosenElem.val());
+    $("#create_chosen").value = chosenElem.val();
+    $("#btnCreate").prop("disabled", false);
+  },
+
+  stakeSourceSelected: function (id) {
+    console.log(id);
+    console.log("grp ", $("#create_stake button"));
+
+    $("#create_stake button").not(`#${id}`).removeClass("btn-primary").addClass("btn-secondary");
+
+    //$("#create_stake button").find(`#${id}`).addClass("btn-danger");
+
+    const chosenElem = $(`#${id}`);
+    chosenElem.removeClass("btn-secondary").addClass("btn-primary");
+
+    console.log("chosenElem", chosenElem);
+    console.log("chosenElem.val", chosenElem.val());
+    $("#create_stakeSource").value = chosenElem.val();
+  },
+
+  setActiveWallet: function () {
+    const active = $("#addressSelector option:selected");
+    const activeAddress = active.attr("value");
+    document.getElementById("activeWallet").innerHTML = active.attr("label").split(" - ")[0];
+
+    console.log("this.wallets", this.wallets);
+    const activeWallet = this.wallets.find((x) => x.address === activeAddress.toString());
+    this.activeAccount = activeWallet;
+  },
+
   setUpApp: async function () {
     const { web3 } = this;
 
-    const labels = ["Deployer", "Alice", "Bob", "", ""];
+    const labels = ["Deployer", "Alice", "Bob", "Carol", "Dennis", "Erin", "Fred", "Gina", "Homer", "Jillian"];
+    const addressSelector = document.getElementById("addressSelector");
 
     web3.eth
       .getAccounts()
@@ -44,11 +102,19 @@ const App = {
           let address = accountList[i];
           let label = labels[i];
           this.wallets.push({ i, address, label });
+
+          if (i !== 0) {
+            var option = document.createElement("option");
+            option.value = address;
+            option.label = `${label} - ${address}`;
+            addressSelector.add(option);
+          }
         }
       })
       .catch(console.error);
 
     await this.showContractBalance();
+    this.setActiveWallet();
   },
 };
 
