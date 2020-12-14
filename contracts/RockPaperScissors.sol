@@ -66,7 +66,8 @@ contract RockPaperScissors {
             emit LogWinningsBalanceChanged(msg.sender, winningsBalance, newWinningsBalance);
         } 
         
-        uint id = nextGameId.add(1); //SLOAD
+        uint id = nextGameId; //SLOAD
+        nextGameId = id.add(1); //SSTORE
         Game storage game = games[id];
 
         game.stake = amountToStake; //SSTORE
