@@ -93,7 +93,7 @@ contract RockPaperScissors {
     
     function enrolAndCommit(uint gameId, bytes32 maskedChoice, uint amountToStake) public payable {        
          uint _deadline = games[gameId].deadline; //SLOAD
-        require(_deadline > block.timestamp, "RockPaperScissors::enrolAndCommit:game has expired (or does not exist)"); //SLOAD
+        require(block.timestamp <= _deadline, "RockPaperScissors::enrolAndCommit:game has expired (or does not exist)"); //SLOAD
         require(maskedChoice != NULL_BYTES, "RockPaperScissors::enrolAndCommit:Invalid maskedChoice value");
         require(games[gameId].playersKey == address(uint(games[gameId].playerOne) ^ uint(msg.sender)), "RockPaperScissors::enrolAndCommit:sender is not player"); //SLOAD, SLOAD
         require(games[gameId].gameMoves[msg.sender].commit == NULL_BYTES , "RockPaperScissors::enrolAndCommit:player is already enrolled"); //SLOAD        
