@@ -130,15 +130,15 @@ contract RockPaperScissors {
             emit LogChoiceRevealed(gameId, msg.sender, choice);
         }
         else {
-            (bool _gameOver, bool _senderIsWinner) = resolve(choice, counterPartyChoice);
+            (bool _gameOver, bool _senderIsWinner) = solve(choice, counterPartyChoice);
             
             _gameOver ? _senderIsWinner ? finish(gameId, msg.sender, _counterParty, choice) 
                                         : finish(gameId, _counterParty, msg.sender, counterPartyChoice) 
-                        :resolveTiedGame(gameId, msg.sender, _counterParty, choice);
+                        :finishTiedGame(gameId, msg.sender, _counterParty, choice);
         }        
     }
 
-    function resolveTiedGame(uint gameId, address sender, address counterParty, Choice choice) internal {
+    function finishTiedGame(uint gameId, address sender, address counterParty, Choice choice) internal {
         uint owed = games[gameId].stake.div(2); //SLOAD // pay is always an even number (or 0)
         
         if(owed != 0){
@@ -197,7 +197,7 @@ contract RockPaperScissors {
                 finish(gameId, playerOne, playerTwo, choiceOne);
             }
             else { 
-                resolveTiedGame(gameId, playerOne, playerTwo, Choice.None);
+                finishTiedGame(gameId, playerOne, playerTwo, Choice.None);
             }
         }
         else {         
@@ -225,7 +225,7 @@ contract RockPaperScissors {
         result = 0 => game tied
         result = 1 => player one wins, 
         result = 2 => player two wins  */
-    function resolve(Choice senderChoice, Choice counterPartyChoice) internal pure returns (bool gameOver, bool senderIsWinner) {        
+    function solve(Choice senderChoice, Choice counterPartyChoice) internal pure returns (bool gameOver, bool senderIsWinner) {        
         uint _result =  SafeMath.mod(uint(senderChoice).add(3).sub(uint(counterPartyChoice)), 3) ;
         return (_result != 0, _result == 1);
     }
