@@ -60,14 +60,17 @@ contract RockPaperScissors {
         require(gameLifetime <= MAX_GAME_LIFETIME,"RockPaperScissors::createAndCommit:Invalid maximum game deadline");       
         
         uint winningsBalance = winnings[msg.sender]; //SLOAD
-        (bool stakedFromWinnings, uint newWinningsBalance) = validateStake(int(msg.value), int(amountToStake), int(winningsBalance), int(MIN_STAKE));        
-        if(stakedFromWinnings) { 
-            winnings[msg.sender] = newWinningsBalance; //SSTORE
-            emit LogWinningsBalanceChanged(msg.sender, winningsBalance, newWinningsBalance);
+
+        uint _newWinningsBalance = winningsBalance.add(msg.value).sub(amountToStake, "RockPaperScissors::createAndCommit:Insuffcient balance to stake");
+        require(amountToStake >= MIN_STAKE, "RockPaperScissors::createAndCommit:Insuffcient balance to stake, below minimum threshold");    
+        
+        if(winningsBalance != _newWinningsBalance) { 
+            winnings[msg.sender] = _newWinningsBalance; //SSTORE
+            emit LogWinningsBalanceChanged(msg.sender, winningsBalance, _newWinningsBalance);
         } 
         
-        uint id = nextGameId; //SLOAD
-        nextGameId = id.add(1); //SSTORE
+        nextGameId += 1; //SSTORE
+        uint id = nextGameId; //SLOAD        
         Game storage game = games[id];
 
         game.stake = amountToStake; //SSTORE
@@ -78,18 +81,7 @@ contract RockPaperScissors {
         uint _gameDeadline =  gameLifetime.add(block.timestamp);        
         game.deadline = _gameDeadline; //SSTORE               
         
-        emit LogGameCreated(id, msg.sender, otherPlayer, maskedChoice, _gameDeadline, stakedFromWinnings, amountToStake);
-    }
-
-    function validateStake(int sentValue, int toStake, int winningsBalance, int minimumStake ) 
-    internal pure 
-    returns (bool stakedFromWinnings, uint newWinningsBalance) {
-
-        int _newWinningsBalance = winningsBalance.signed_add(sentValue).signed_sub(toStake);
-
-        require(_newWinningsBalance >= 0 && toStake >= minimumStake, "RockPaperScissors::validateStake:Insuffcient balance to stake");
-
-        return (winningsBalance != _newWinningsBalance, uint(_newWinningsBalance));
+        emit LogGameCreated(id, msg.sender, otherPlayer, maskedChoice, _gameDeadline, winningsBalance != _newWinningsBalance, amountToStake);
     }
     
     function enrolAndCommit(uint gameId, bytes32 maskedChoice, uint amountToStake) public payable {        
@@ -101,20 +93,23 @@ contract RockPaperScissors {
         
         uint winningsBalance = winnings[msg.sender]; //SLOAD
         uint stakedInGame = games[gameId].stake; //SLOAD
-        (bool stakedFromWinnings, uint newWinningsBalance) = validateStake(int(msg.value), int(amountToStake), int(winningsBalance), int(stakedInGame));        
-        if(stakedFromWinnings) { 
-            winnings[msg.sender] = newWinningsBalance; //SSTORE
-            emit LogWinningsBalanceChanged(msg.sender, winningsBalance, newWinningsBalance);
+
+        uint _newWinningsBalance = winningsBalance.add(msg.value).sub(amountToStake, "RockPaperScissors::enrolAndCommit:Insuffcient balance to stake");
+        require(amountToStake >= stakedInGame, "RockPaperScissors::enrolAndCommit:Insuffcient balance to stake, below minimum threshold");    
+        
+        if(winningsBalance != _newWinningsBalance) { 
+            winnings[msg.sender] = _newWinningsBalance; //SSTORE
+            emit LogWinningsBalanceChanged(msg.sender, winningsBalance, _newWinningsBalance);
         } 
         
-        games[gameId].stake = stakedInGame.add(amountToStake); //SSTORE        
+        games[gameId].stake += amountToStake; //SSTORE        
         games[gameId].gameMoves[msg.sender].commit = maskedChoice; //SSTORE
 
         if(block.timestamp.add(POST_COMMIT_WAIT_WINDOW) > _deadline) {
-            games[gameId].deadline = _deadline.add(POST_COMMIT_WAIT_WINDOW); //SSTORE
+            games[gameId].deadline += POST_COMMIT_WAIT_WINDOW; //SSTORE
         }
 
-        emit LogGameEnrolled(gameId, msg.sender, maskedChoice, stakedFromWinnings, amountToStake);
+        emit LogGameEnrolled(gameId, msg.sender, maskedChoice, winningsBalance != _newWinningsBalance, amountToStake);
     }
 
     function reveal(uint gameId, Choice choice, bytes32 mask,  uint maskingTimestamp) public { 
@@ -140,7 +135,7 @@ contract RockPaperScissors {
     }
 
     function finishTiedGame(uint gameId, address sender, address counterParty, Choice choice) internal {
-        uint owed = games[gameId].stake.div(2); //SLOAD // pay is always an even number (or 0)
+        uint owed = games[gameId].stake.div(2); //SLOAD
         
         if(owed != 0){
             uint balanceOne = winnings[sender]; //SLOAD
