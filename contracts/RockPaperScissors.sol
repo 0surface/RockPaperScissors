@@ -124,6 +124,7 @@ contract RockPaperScissors {
         }
         else {
             uint pay = games[gameId].stake; //SLOAD
+            
             (bool _gameOver, bool _senderIsWinner) = solve(choice, counterPartyChoice);
             
             _gameOver ? _senderIsWinner ? finish(gameId, msg.sender, _counterParty, choice, pay.add(pay)) 
@@ -147,8 +148,7 @@ contract RockPaperScissors {
         emit LogGameTied(gameId, msg.sender, choice, block.timestamp);        
     }
 
-    function finish(uint gameId, address winner, address loser, Choice winningChoice, uint pay) internal {
-        uint pay = games[gameId].stake; //SLOAD
+    function finish(uint gameId, address winner, address loser, Choice winningChoice, uint pay) internal {        
         if(pay != 0) {
             uint balance = winnings[winner]; //SLOAD        
             emit LogWinningsBalanceChanged(winner, balance, balance.add(pay));
