@@ -2,12 +2,10 @@
 pragma solidity 0.7.0;
 
 import "./SafeMath.sol";
-import "./SignedSafeMath.sol";
 
 contract RockPaperScissors {
 
     using SafeMath for uint;
-    using SignedSafeMath for int;
     
     enum Choice  { None, Rock, Paper, Scissors }
     uint public nextGameId;
@@ -101,8 +99,7 @@ contract RockPaperScissors {
             winnings[msg.sender] = _newWinningsBalance; //SSTORE
             emit LogWinningsBalanceChanged(msg.sender, winningsBalance, _newWinningsBalance);
         } 
-        
-        games[gameId].stake += amountToStake; //SSTORE        
+                
         games[gameId].gameMoves[msg.sender].commit = maskedChoice; //SSTORE
 
         if(block.timestamp.add(POST_COMMIT_WAIT_WINDOW) > _deadline) {
@@ -126,32 +123,31 @@ contract RockPaperScissors {
             emit LogChoiceRevealed(gameId, msg.sender, choice);
         }
         else {
+            uint pay = games[gameId].stake; //SLOAD
             (bool _gameOver, bool _senderIsWinner) = solve(choice, counterPartyChoice);
             
-            _gameOver ? _senderIsWinner ? finish(gameId, msg.sender, _counterParty, choice) 
-                                        : finish(gameId, _counterParty, msg.sender, counterPartyChoice) 
-                        :finishTiedGame(gameId, msg.sender, _counterParty, choice);
+            _gameOver ? _senderIsWinner ? finish(gameId, msg.sender, _counterParty, choice, pay.add(pay)) 
+                                        : finish(gameId, _counterParty, msg.sender, counterPartyChoice, pay.add(pay)) 
+                        :finishTiedGame(gameId, msg.sender, _counterParty, choice, pay);
         }        
     }
 
-    function finishTiedGame(uint gameId, address sender, address counterParty, Choice choice) internal {
-        uint owed = games[gameId].stake.div(2); //SLOAD
-        
-        if(owed != 0){
+    function finishTiedGame(uint gameId, address sender, address counterParty, Choice choice, uint pay) internal {
+        if(pay != 0){
             uint balanceOne = winnings[sender]; //SLOAD
-            winnings[sender] = balanceOne.add(owed); //SSTORE
-            emit LogWinningsBalanceChanged(sender, balanceOne, balanceOne.add(owed));
+            winnings[sender] = balanceOne.add(pay); //SSTORE
+            emit LogWinningsBalanceChanged(sender, balanceOne, balanceOne.add(pay));
 
             uint balanceTwo = winnings[counterParty]; //SLOAD
-            winnings[counterParty] = balanceTwo.add(owed); //SSTORE
-            emit LogWinningsBalanceChanged(counterParty, balanceTwo, balanceTwo.add(owed));        
+            winnings[counterParty] = balanceTwo.add(pay); //SSTORE
+            emit LogWinningsBalanceChanged(counterParty, balanceTwo, balanceTwo.add(pay));        
         }
 
         eraseGame(gameId, sender, counterParty);
         emit LogGameTied(gameId, msg.sender, choice, block.timestamp);        
     }
 
-    function finish(uint gameId, address winner, address loser, Choice winningChoice) internal {
+    function finish(uint gameId, address winner, address loser, Choice winningChoice, uint pay) internal {
         uint pay = games[gameId].stake; //SLOAD
         if(pay != 0) {
             uint balance = winnings[winner]; //SLOAD        
@@ -166,7 +162,7 @@ contract RockPaperScissors {
     /* @dev Determines winner or tie payments, retires game.
         4 (+ 1) scenarios - 2 choice states (None, Revealed) x 2 players
         * playerTwo != address(0) => playerTwoIsEnrolled
-        (None, None) + !playerTwoIsEnrolled => pay playerOne
+        (None, None) + !playerTwoIsEnrolled => pay playerOne its stake only
         (None, None) + playerTwoIsEnrolled => pay both, 
         (Revaled, None) => pay playerOne
         (None, Revaled) => pay playerTwo        
@@ -180,20 +176,24 @@ contract RockPaperScissors {
         address playerTwo = address(uint(playerOne) ^ uint(games[gameId].playersKey)); //SLOAD
         Choice choiceOne = games[gameId].gameMoves[playerOne].choice; //SLOAD
         Choice choiceTwo = games[gameId].gameMoves[playerTwo].choice; //SLOAD
+        uint staked = games[gameId].stake; //SLOAD
         
         if(choiceOne != Choice.None && choiceTwo == Choice.None) 
         {
-            finish(gameId, playerOne, playerTwo, choiceOne);
+            finish(gameId, playerOne, playerTwo, choiceOne, staked.add(staked));
         } 
-        else if(choiceOne == Choice.None && choiceTwo != Choice.None) {  
-            finish(gameId, playerTwo, playerOne, choiceTwo);     
+        else if(choiceOne == Choice.None && choiceTwo != Choice.None) 
+        {  
+            finish(gameId, playerTwo, playerOne, choiceTwo, staked.add(staked));     
         }
-        else if(choiceOne == Choice.None && choiceTwo == Choice.None){
-            if(games[gameId].gameMoves[playerTwo].commit == NULL_BYTES) { //SSLOAD                
-                finish(gameId, playerOne, playerTwo, choiceOne);
+        else if(choiceOne == Choice.None && choiceTwo == Choice.None)
+        {
+            if(games[gameId].gameMoves[playerTwo].commit == NULL_BYTES)  //SSLOAD
+            {                 
+                finish(gameId, playerOne, playerTwo, choiceOne, staked);
             }
             else { 
-                finishTiedGame(gameId, playerOne, playerTwo, Choice.None);
+                finishTiedGame(gameId, playerOne, playerTwo, Choice.None, staked);
             }
         }
         else {         
