@@ -68,8 +68,7 @@ contract RockPaperScissors {
         } 
         
         nextGameId += 1; //SSTORE
-        uint id = nextGameId; //SLOAD        
-        Game storage game = games[id];
+        Game storage game = games[nextGameId];//SLOAD
 
         game.stake = amountToStake; //SSTORE
         game.playerOne = msg.sender; //SSTORE        
@@ -79,7 +78,7 @@ contract RockPaperScissors {
         uint _gameDeadline =  gameLifetime.add(block.timestamp);        
         game.deadline = _gameDeadline; //SSTORE               
         
-        emit LogGameCreated(id, msg.sender, otherPlayer, maskedChoice, _gameDeadline, winningsBalance != _newWinningsBalance, amountToStake);
+        emit LogGameCreated(nextGameId, msg.sender, otherPlayer, maskedChoice, _gameDeadline, winningsBalance != _newWinningsBalance, amountToStake);
     }
     
     function enrolAndCommit(uint gameId, bytes32 maskedChoice, uint amountToStake) public payable {        
