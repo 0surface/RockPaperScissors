@@ -2,7 +2,6 @@ const RockPaperScissors = artifacts.require("RockPaperScissors");
 const truffleAssert = require("truffle-assertions");
 const chai = require("chai");
 const truffleAssertions = require("truffle-assertions");
-const { hasUncaughtExceptionCaptureCallback } = require("process");
 const { BN } = web3.utils.BN;
 const { assert, expect } = chai;
 chai.use(require("chai-bn")(BN));
@@ -15,7 +14,6 @@ contract("RockPaperScissors", (accounts) => {
   });
 
   let rockPaperScissors;
-  let deployedInstanceAddress;
   let maskedChoice;
   let MIN_GAME_LIFETIME;
   let MAX_GAME_LIFETIME;
@@ -181,7 +179,7 @@ contract("RockPaperScissors", (accounts) => {
       expect(gameObj.deadline).to.be.a.bignumber.that.equals(new BN(creationBlock.timestamp).add(new BN(gameLifeTime)));
       assert.strictEqual(gameObj.playerOne, playerOne, "Incorrect playerOne value");
       assert.strictEqual(playerOne_Move._commit, maskedChoice, "incorrect commited value");
-      assert.strictEqual(playerOne_Move.choice, CHOICE.NONE.toString(), "choice value should be 3");
+      assert.strictEqual(playerOne_Move.choice, CHOICE.NONE.toString(), "choice value should be None");
       assert.strictEqual(gameObj.playersKey, expectedPlayersKey, "incorrect xor of addresses");
     });
     it("should add to winnings balance when msg.value > amountToStake", async () => {
