@@ -70,9 +70,8 @@ contract RockPaperScissors {
             winnings[msg.sender] = _newWinningsBalance; //SSTORE
             emit LogWinningsBalanceChanged(msg.sender, winningsBalance, _newWinningsBalance);
         } 
-        
-        nextGameId += 1; //SSTORE
-        Game storage game = games[nextGameId];//SLOAD
+                
+        Game storage game = games[nextGameId += 1];//SSTORE, SLOAD
 
         game.stake = amountToStake; //SSTORE
         game.playerOne = msg.sender; //SSTORE        

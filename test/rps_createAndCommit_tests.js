@@ -18,7 +18,6 @@ contract("RockPaperScissors", (accounts) => {
   let MIN_GAME_LIFETIME;
   let MAX_GAME_LIFETIME;
   let MIN_STAKE;
-  let POST_COMMIT_WAIT_WINDOW;
   const CHOICE = {
     NONE: 0,
     ROCK: 1,
@@ -116,46 +115,19 @@ contract("RockPaperScissors", (accounts) => {
       expect(new BN(eventValues.gameId)).to.be.a.bignumber.that.equals(_expectedGameId);
     });
     it("should increment nextGameId on successful game creation", async () => {
+      //Arrange
       const gameIdCountBefore = await rockPaperScissors.nextGameId.call();
-      const gameLifeTime = MIN_GAME_LIFETIME;
 
+      //Act
       const txObj = await rockPaperScissors.contract.methods
         .createAndCommit(playerTwo, maskedChoice, MIN_GAME_LIFETIME, MIN_STAKE)
         .send({ from: playerOne, value: MIN_STAKE, gas: gas });
+
+      //Assert
       const gameIdCountAfter = await rockPaperScissors.nextGameId.call();
-
-      const createdGame = await rockPaperScissors.games.call(gameIdCountAfter);
-      const gamePlayerOne = createdGame.playerOne;
-      const gamePlayerTwo = createdGame.playerTwo;
-      const stake = createdGame.stake;
-      const deadline = createdGame.deadline;
-      const lastCommitDeadline = createdGame.lastCommitDeadline;
-      const playerOne_Move = await rockPaperScissors.contract.methods
-        .getGameMove(gameIdCountAfter, playerOne)
-        .call({ from: deployer });
-      const playerOneCommit = playerOne_Move.commit;
-      const playerOneChoice = playerOne_Move.choice;
-
-      // console.log("gameLifeTime", gameLifeTime);
-      // console.log("postCommitWaitWindow", POST_COMMIT_WAIT_WINDOW);
-      // console.log("gameIdCountBefore", gameIdCountBefore);
-      // console.log("gameIdCountAfter", gameIdCountAfter);
-      // console.log("createdGame", createdGame);
-      // console.log("gamePlayerOne, gamePlayerTwo", gamePlayerOne, gamePlayerTwo);
-      // console.log("playerOne_Move", playerOne_Move);
-      // console.log("playerOneCommit", playerOneCommit);
-      // console.log("playerOneChoice", playerOneChoice);
-      // console.log("stake", stake);
-      // console.log("deadline, lastCommitDeadline ", deadline, lastCommitDeadline);
-      // console.log("");
-
       expect(gameIdCountAfter).to.be.a.bignumber.that.equals(gameIdCountBefore + new BN(1));
     });
     it("should set STORAGE values on successful game creation", async () => {
-      /*
-      game.stake, game.playerone, game.playersKey, game.gameMoves[playerOne].commit, game.deadline
-      */
-
       //Arrange
       const gameLifeTime = MIN_GAME_LIFETIME;
       const expectedPlayersKey = await rockPaperScissors.contract.methods
