@@ -1,7 +1,9 @@
 const RockPaperScissors = artifacts.require("RockPaperScissors");
 const truffleAssert = require("truffle-assertions");
 const chai = require("chai");
+const { BN } = web3.utils.BN;
 const { assert } = chai;
+chai.use(require("chai-bn")(BN));
 
 contract("RockPaperScissors", (accounts) => {
   before(async () => {
@@ -104,11 +106,14 @@ contract("RockPaperScissors", (accounts) => {
       );
     });
 
-    it("should revert when given 0 future maskingTimestamp", async () => {
+    it("should revert when given insuffciently small maskingTimestamp", async () => {
       const maskingTimestamp = (await web3.eth.getBlock()).timestamp;
+      const maxGameLifetime = await rockPaperScissors.MAX_GAME_LIFETIME.call();
+      const insuffcientValue = maskingTimestamp - maxGameLifetime * 2 - new BN(1);
+
       await truffleAssert.reverts(
         rockPaperScissors.contract.methods
-          .generateMaskedChoice(CHOICE.ROCK, choiceMaskString, playerOne, maskingTimestamp + 86400)
+          .generateMaskedChoice(CHOICE.ROCK, choiceMaskString, playerOne, insuffcientValue)
           .call({ from: playerOne }),
         "RockPaperScissors::generateMaskedChoice:Invalid blockTimestamp"
       );

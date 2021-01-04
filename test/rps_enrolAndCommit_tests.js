@@ -84,7 +84,7 @@ contract("RockPaperScissors", (accounts) => {
       const _maskedChoice = await getMaskedChoice(playerTwo, playerTwoChoice, playerTwo_choiceMaskString);
       await truffleAssert.reverts(
         rockPaperScissors.contract.methods
-          .enrolAndCommit(gameId, _maskedChoice, gameStaked)
+          .enrolAndCommit(gameId, _maskedChoice)
           .send({ from: playerTwo, value: gameStaked, gas: gas }),
         "RockPaperScissors::enrolAndCommit:game has expired (or does not exist)"
       );
@@ -92,7 +92,7 @@ contract("RockPaperScissors", (accounts) => {
     it("should revert when given null maskedChoice value", async () => {
       await truffleAssert.reverts(
         rockPaperScissors.contract.methods
-          .enrolAndCommit(gameId, NULL_BYTES, gameStaked)
+          .enrolAndCommit(gameId, NULL_BYTES)
           .send({ from: playerTwo, value: gameStaked, gas: gas }),
         "RockPaperScissors::enrolAndCommit:Invalid maskedChoice value"
       );
@@ -101,7 +101,7 @@ contract("RockPaperScissors", (accounts) => {
       const _maskedChoice = await getMaskedChoice(someoneElse, playerTwoChoice, playerTwo_choiceMaskString);
       await truffleAssert.reverts(
         rockPaperScissors.contract.methods
-          .enrolAndCommit(gameId, _maskedChoice, gameStaked)
+          .enrolAndCommit(gameId, _maskedChoice)
           .send({ from: someoneElse, value: gameStaked, gas: gas }),
         "RockPaperScissors::enrolAndCommit:Invalid player"
       );
@@ -111,7 +111,7 @@ contract("RockPaperScissors", (accounts) => {
       const _maskedChoice_A = await getMaskedChoice(someoneElse, playerTwoChoice, playerTwo_choiceMaskString);
 
       await rockPaperScissors.contract.methods
-        .enrolAndCommit(gameId, _maskedChoice_A, gameStaked)
+        .enrolAndCommit(gameId, _maskedChoice_A)
         .send({ from: playerTwo, value: gameStaked, gas: gas });
 
       //Act
@@ -120,7 +120,7 @@ contract("RockPaperScissors", (accounts) => {
       const _maskedChoice = await getMaskedChoice(someoneElse, playerTwoChoice, playerTwo_choiceMaskString);
       await truffleAssert.reverts(
         rockPaperScissors.contract.methods
-          .enrolAndCommit(gameId, _maskedChoice, gameStaked)
+          .enrolAndCommit(gameId, _maskedChoice)
           .send({ from: playerTwo, value: gameStaked, gas: gas }),
         "RockPaperScissors::enrolAndCommit:player is already enrolled"
       );
@@ -128,9 +128,7 @@ contract("RockPaperScissors", (accounts) => {
     it("should revert if msg.value is insufficient", async () => {
       const _maskedChoice = await getMaskedChoice(someoneElse, playerTwoChoice, playerTwo_choiceMaskString);
       await truffleAssert.reverts(
-        rockPaperScissors.contract.methods
-          .enrolAndCommit(gameId, _maskedChoice, gameStaked)
-          .send({ from: playerTwo, value: 0, gas: gas }),
+        rockPaperScissors.contract.methods.enrolAndCommit(gameId, _maskedChoice).send({ from: playerTwo, value: 0, gas: gas }),
         "RockPaperScissors::enrolAndCommit:Insuffcient balance to stake"
       );
     });
@@ -139,9 +137,9 @@ contract("RockPaperScissors", (accounts) => {
       const _maskedChoice = await getMaskedChoice(someoneElse, playerTwoChoice, playerTwo_choiceMaskString);
       await truffleAssert.reverts(
         rockPaperScissors.contract.methods
-          .enrolAndCommit(gameId, _maskedChoice, gameStaked.toNumber() - 1000)
+          .enrolAndCommit(gameId, _maskedChoice)
           .send({ from: playerTwo, value: gameStaked.toNumber() - 1000, gas: gas }),
-        "RockPaperScissors::enrolAndCommit:Insuffcient balance, amountToStake is below required stake in Game"
+        "RockPaperScissors::enrolAndCommit:Insuffcient balance to stake"
       );
     });
 
@@ -154,7 +152,7 @@ contract("RockPaperScissors", (accounts) => {
         .call({ from: playerTwo });
       //Act
       const enrolTxObj = await rockPaperScissors.contract.methods
-        .enrolAndCommit(gameId, _maskedChoice, amountToStake)
+        .enrolAndCommit(gameId, _maskedChoice)
         .send({ from: playerTwo, value: amountToStake, gas: gas });
 
       const eventValues = enrolTxObj.events.LogGameEnrolled.returnValues;
@@ -164,7 +162,7 @@ contract("RockPaperScissors", (accounts) => {
       assert.strictEqual(eventValues.gameId, gameId.toString(), "LogGameEnrolled event gameId value is incorrect");
       assert.strictEqual(eventValues.commiter, playerTwo, "LogGameEnrolled event commiter value is incorrect");
       assert.isFalse(eventValues.stakedFromWinnings, "LogGameEnrolled event stakedFromWinnings value is incorrect");
-      expect(new BN(eventValues.staked)).to.be.a.bignumber.that.equals(MIN_STAKE);
+      expect(new BN(eventValues.sent)).to.be.a.bignumber.that.equals(MIN_STAKE);
     });
 
     it("should set to STORAGE maskedChoice value on successful enrolment", async () => {
@@ -173,7 +171,7 @@ contract("RockPaperScissors", (accounts) => {
 
       //Act
       const enrolTxObj = await rockPaperScissors.contract.methods
-        .enrolAndCommit(gameId, _maskedChoice, gameStaked)
+        .enrolAndCommit(gameId, _maskedChoice)
         .send({ from: playerTwo, value: gameStaked, gas: gas });
 
       const playerTwo_Move = await rockPaperScissors.contract.methods.getGameMove(gameId, playerTwo).call({ from: deployer });
@@ -194,7 +192,7 @@ contract("RockPaperScissors", (accounts) => {
       //Act
       /* No need to advance time as min_game_lifetime(1hours) < POST_COMMIT_WAIT_WINDOW (12 hours)*/
       enrolTxObj = await rockPaperScissors.contract.methods
-        .enrolAndCommit(gameId, _maskedChoice, gameStaked)
+        .enrolAndCommit(gameId, _maskedChoice)
         .send({ from: playerTwo, value: gameStaked, gas: gas });
 
       const deadlineAfter = (await rockPaperScissors.games.call(gameId)).deadline;

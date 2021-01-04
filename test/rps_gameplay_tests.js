@@ -71,13 +71,11 @@ contract("RockPaperScissors", (accounts) => {
       await rockPaperScissors.contract.methods
         .createAndCommit(playerTwo, maskedChoiceOne, gameLifeTime, gameStaked)
         .send({ from: playerOne, value: gameStaked, gas: gas });
-      totalStaked = totalStaked.add(gameStaked);
+      totalStaked.add(gameStaked);
       await timeHelper.advanceTimeAndBlock(15);
 
       //set gameId variable
       gameId = (await rockPaperScissors.nextGameId.call()).toNumber();
-      const gameObj = await rockPaperScissors.games.call(gameId);
-      console.log("gameObj", gameObj);
 
       //create masked choice for playerTwo
       maskTimestampTwo = (await web3.eth.getBlock("latest")).timestamp;
@@ -86,10 +84,12 @@ contract("RockPaperScissors", (accounts) => {
 
       //Enrol and commit
       await timeHelper.advanceTimeAndBlock(15);
+      const playerTwoStake = new BN(5000000000000000);
       await rockPaperScissors.contract.methods
-        .enrolAndCommit(gameId, maskedChoiceTwo, gameStaked)
-        .send({ from: playerTwo, value: gameStaked, gas: gas });
-      totalStaked = totalStaked.add(gameStaked);
+        .enrolAndCommit(gameId, maskedChoiceTwo)
+        .send({ from: playerTwo, value: playerTwoStake, gas: gas });
+      const stakedInGame = gameStaked.add(gameStaked);
+      console.log("stakedInGame Before Finish", stakedInGame.toNumber());
 
       //get game moves
       const playerOneGameMove = await rockPaperScissors.contract.methods.getGameMove(gameId, playerOne).call({ from: deployer });
@@ -109,8 +109,10 @@ contract("RockPaperScissors", (accounts) => {
         .reveal(gameId, playerTwoChoice, playerTwo_choiceMaskString, maskTimestampTwo)
         .send({ from: playerTwo, gas: gas });
 
-      //assert
+      const gameObj = await rockPaperScissors.games.call(gameId);
+      console.log("game at end", gameObj);
 
+      //assert
       const playerOneWinnings = await rockPaperScissors.winnings.call(playerOne);
       const playerTwoWinnings = await rockPaperScissors.winnings.call(playerTwo);
       const contractBalance = await web3.eth.getBalance(deployedInstanceAddress);
@@ -118,10 +120,11 @@ contract("RockPaperScissors", (accounts) => {
       console.log("playerTwoWinnings", playerTwoWinnings.toNumber());
       console.log("contractBalance", contractBalance);
       console.log("totalStaked", totalStaked.toNumber());
+      console.log("totalStaked after finish", gameObj.stake.toNumber());
 
-      assert.strictEqual(playerOneWinnings.toNumber(), totalStaked.toNumber(), "playerOne winnings value is incorrect");
-      assert.strictEqual(playerTwoWinnings.toNumber(), 0, "playerTwo winnings value is incorrect");
-      assert.strictEqual(Number(contractBalance), totalStaked.toNumber(), "Contract balance value is incorrect");
+      expect(playerOneWinnings).to.be.a.bignumber.that.equals(gameStaked.add(gameStaked), "playerOne winnings is incorrect");
+      expect(playerTwoWinnings).to.be.a.bignumber.that.equals(playerTwoStake.sub(gameStaked), "playerTwo winnings is incorrect");
+      expect(playerOneWinnings.add(playerTwoWinnings)).to.be.a.bignumber.that.equals(contractBalance, "Game Invariant broken");
     });
   });
 });

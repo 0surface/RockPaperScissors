@@ -33,7 +33,7 @@ contract RockPaperScissors {
     bytes32 constant public NULL_BYTES = bytes32(0);
 
     event LogGameCreated(uint indexed gameId, address indexed playerOne, address indexed playerTwo, bytes32 maskedChoice, uint deadline, bool stakedFromWinnings, uint staked);
-    event LogGameEnrolled(uint indexed gameId, address indexed commiter, bytes32 maskedChoice, bool stakedFromWinnings, uint staked);    
+    event LogGameEnrolled(uint indexed gameId, address indexed commiter, bytes32 maskedChoice, bool stakedFromWinnings, uint sent);    
     event LogChoiceCommited(uint indexed gameId, address indexed commiter, bytes32 maskedChoice);    
     event LogChoiceRevealed(uint indexed gameId, address indexed revealer, Choice choice);    
     event LogGameFinished(uint indexed gameId, address indexed winner, address indexed loser, Choice winnerChoice, address resolver, uint pay, uint finishTimeStamp);
@@ -84,7 +84,7 @@ contract RockPaperScissors {
         emit LogGameCreated(nextGameId, msg.sender, otherPlayer, maskedChoice, _gameDeadline, winningsBalance != _newWinningsBalance, amountToStake);
     }
     
-    function enrolAndCommit(uint gameId, bytes32 maskedChoice, uint amountToStake) public payable {        
+    function enrolAndCommit(uint gameId, bytes32 maskedChoice) public payable {        
         uint _deadline = games[gameId].deadline; //SLOAD
         require(block.timestamp <= _deadline, "RockPaperScissors::enrolAndCommit:game has expired (or does not exist)"); //SLOAD
         require(maskedChoice != NULL_BYTES, "RockPaperScissors::enrolAndCommit:Invalid maskedChoice value");        
@@ -92,10 +92,7 @@ contract RockPaperScissors {
         require(games[gameId].gameMoves[msg.sender].commit == NULL_BYTES , "RockPaperScissors::enrolAndCommit:player is already enrolled"); //SLOAD
         
         uint winningsBalance = winnings[msg.sender]; //SLOAD
-        uint requiredStake = games[gameId].stake; //SLOAD
-
-        uint _newWinningsBalance = winningsBalance.add(msg.value).sub(amountToStake, "RockPaperScissors::enrolAndCommit:Insuffcient balance to stake");
-        require(amountToStake >= requiredStake, "RockPaperScissors::enrolAndCommit:Insuffcient balance, amountToStake is below required stake in Game");    
+        uint _newWinningsBalance = winningsBalance.add(msg.value).sub(games[gameId].stake, "RockPaperScissors::enrolAndCommit:Insuffcient balance to stake"); //SLOAD         
         
         if(winningsBalance != _newWinningsBalance) { 
             winnings[msg.sender] = _newWinningsBalance; //SSTORE
@@ -104,11 +101,11 @@ contract RockPaperScissors {
                 
         games[gameId].gameMoves[msg.sender].commit = maskedChoice; //SSTORE
 
-        if(block.timestamp.add(POST_COMMIT_WAIT_WINDOW) > _deadline) {
+        if(_deadline < block.timestamp.add(POST_COMMIT_WAIT_WINDOW)) {
             games[gameId].deadline += POST_COMMIT_WAIT_WINDOW; //SSTORE
         }
 
-        emit LogGameEnrolled(gameId, msg.sender, maskedChoice, winningsBalance != _newWinningsBalance, amountToStake);
+        emit LogGameEnrolled(gameId, msg.sender, maskedChoice, winningsBalance != _newWinningsBalance, msg.value);
     }
 
     function reveal(uint gameId, Choice choice, bytes32 mask,  uint maskingTimestamp) public { 
