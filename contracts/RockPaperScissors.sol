@@ -125,25 +125,29 @@ contract RockPaperScissors {
             emit LogChoiceRevealed(gameId, msg.sender, choice);
         }
         else {
-            uint pay = games[gameId].stake; //SLOAD
+            uint owed = games[gameId].stake; //SLOAD
             
-            (bool _gameOver, bool _senderIsWinner) = solve(choice, counterPartyChoice);
-            
-            _gameOver ? _senderIsWinner ? finish(gameId, msg.sender, _counterParty, choice, pay.add(pay)) 
-                                        : finish(gameId, _counterParty, msg.sender, counterPartyChoice, pay.add(pay)) 
-                        :finishTiedGame(gameId, msg.sender, _counterParty, choice, pay);
+            uint result = solve(choice, counterPartyChoice);
+
+            if(result == 1){
+                finish(gameId, msg.sender, _counterParty, choice, owed.add(owed));
+            }else if (result == 2){
+                finish(gameId, _counterParty, msg.sender, counterPartyChoice, owed.add(owed));
+            }else{
+                finishTiedGame(gameId, msg.sender, _counterParty, choice, owed);
+            }
         }        
     }
 
     function finishTiedGame(uint gameId, address sender, address counterParty, Choice choice, uint pay) internal {
         if(pay != 0){
-            uint balanceOne = winnings[sender]; //SLOAD
-            winnings[sender] = balanceOne.add(pay); //SSTORE
-            emit LogWinningsBalanceChanged(sender, balanceOne, balanceOne.add(pay));
+            uint senderBalance = winnings[sender]; //SLOAD
+            winnings[sender] = senderBalance.add(pay); //SSTORE
+            emit LogWinningsBalanceChanged(sender, senderBalance, senderBalance.add(pay));
 
-            uint balanceTwo = winnings[counterParty]; //SLOAD
-            winnings[counterParty] = balanceTwo.add(pay); //SSTORE
-            emit LogWinningsBalanceChanged(counterParty, balanceTwo, balanceTwo.add(pay));        
+            uint counterPartyBalance = winnings[counterParty]; //SLOAD
+            winnings[counterParty] = counterPartyBalance.add(pay); //SSTORE
+            emit LogWinningsBalanceChanged(counterParty, counterPartyBalance, counterPartyBalance.add(pay));        
         }
 
         eraseGame(gameId, sender, counterParty);
@@ -152,9 +156,9 @@ contract RockPaperScissors {
 
     function finish(uint gameId, address winner, address loser, Choice winningChoice, uint pay) internal {        
         if(pay != 0) {
-            uint balance = winnings[winner]; //SLOAD        
-            emit LogWinningsBalanceChanged(winner, balance, balance.add(pay));
+            uint balance = winnings[winner]; //SLOAD            
             winnings[winner] = balance.add(pay); //SSTORE
+            emit LogWinningsBalanceChanged(winner, balance, balance.add(pay));
         }
         
         eraseGame(gameId, winner, loser);
@@ -221,11 +225,10 @@ contract RockPaperScissors {
         Rock = 1, Paper = 2, Siccsors = 3
         result = (senderChoice + 3 - counterPartyChoice) % 3
         result = 0 => game tied
-        result = 1 => player one wins, 
-        result = 2 => player two wins  */
-    function solve(Choice senderChoice, Choice counterPartyChoice) internal pure returns (bool gameOver, bool senderIsWinner) {        
-        uint _result =  SafeMath.mod(uint(senderChoice).add(3).sub(uint(counterPartyChoice)), 3) ;
-        return (_result != 0, _result == 1);
+        result = 1 => sender wins, 
+        result = 2 => counterParty wins  */
+    function solve(Choice senderChoice, Choice counterPartyChoice) internal pure returns (uint) {        
+       return SafeMath.mod(uint(senderChoice).add(3).sub(uint(counterPartyChoice)), 3) ;
     }
 
     function payout() public {
