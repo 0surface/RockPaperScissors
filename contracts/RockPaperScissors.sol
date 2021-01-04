@@ -43,12 +43,12 @@ contract RockPaperScissors {
 
     constructor (){}
 
-    function generateMaskedChoice (Choice choice, bytes32 mask, address masker, uint blockTimestamp) public view returns (bytes32 maskedChoice) {
+    function generateMaskedChoice (Choice choice, bytes32 mask, address masker, uint maskTimestamp) public view returns (bytes32 maskedChoice) {
         require(choice != Choice.None, "RockPaperScissors::generateMaskedChoice:Invalid Choice");
         require(mask != NULL_BYTES, "RockPaperScissors::generateMaskedChoice:mask can not be empty");
-        require(blockTimestamp > (block.timestamp).sub(MAX_GAME_LIFETIME.mul(2)), "RockPaperScissors::generateMaskedChoice:Invalid blockTimestamp");
+        require((block.timestamp).sub(MAX_GAME_LIFETIME.mul(2)) < maskTimestamp, "RockPaperScissors::generateMaskedChoice:Invalid blockTimestamp");
         
-        return keccak256(abi.encodePacked(choice, mask, masker, blockTimestamp, address(this)));
+        return keccak256(abi.encodePacked(choice, mask, masker, maskTimestamp, address(this)));
     }
 
     function addressXor(address first, address second) public pure returns(address){
@@ -93,10 +93,10 @@ contract RockPaperScissors {
         require(games[gameId].gameMoves[msg.sender].commit == NULL_BYTES , "RockPaperScissors::enrolAndCommit:player is already enrolled"); //SLOAD
         
         uint winningsBalance = winnings[msg.sender]; //SLOAD
-        uint stakedInGame = games[gameId].stake; //SLOAD
+        uint requiredStake = games[gameId].stake; //SLOAD
 
         uint _newWinningsBalance = winningsBalance.add(msg.value).sub(amountToStake, "RockPaperScissors::enrolAndCommit:Insuffcient balance to stake");
-        require(amountToStake >= stakedInGame, "RockPaperScissors::enrolAndCommit:Insuffcient balance, amountToStake is below staked in Game");    
+        require(amountToStake >= requiredStake, "RockPaperScissors::enrolAndCommit:Insuffcient balance, amountToStake is below required stake in Game");    
         
         if(winningsBalance != _newWinningsBalance) { 
             winnings[msg.sender] = _newWinningsBalance; //SSTORE

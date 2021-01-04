@@ -2,7 +2,6 @@ const RockPaperScissors = artifacts.require("RockPaperScissors");
 const timeHelper = require("./util/timeHelper");
 const truffleAssert = require("truffle-assertions");
 const chai = require("chai");
-const { isArguments } = require("lodash");
 const { BN } = web3.utils.BN;
 const { assert, expect } = chai;
 chai.use(require("chai-bn")(BN));
@@ -45,10 +44,9 @@ contract("RockPaperScissors", (accounts) => {
 
   async function getMaskedChoice(player, choice, maskString) {
     const _maskingTimestamp_ = (await web3.eth.getBlock("latest")).timestamp;
-    const _maskedChoice = await rockPaperScissors.contract.methods
-      .generateMaskedChoice(playerTwoChoice, playerTwo_choiceMaskString, playerTwo, _maskingTimestamp_)
-      .call({ from: playerTwo });
-    return _maskedChoice;
+    return await rockPaperScissors.contract.methods
+      .generateMaskedChoice(choice, maskString, player, _maskingTimestamp_)
+      .call({ from: player });
   }
 
   describe("enrolAndCommit function tests", () => {
@@ -100,7 +98,7 @@ contract("RockPaperScissors", (accounts) => {
       );
     });
     it("should revert if sender is not playerTwo", async () => {
-      const _maskedChoice = await getMaskedChoice(someoneElse, playerTwoChoice, "randommaskstring");
+      const _maskedChoice = await getMaskedChoice(someoneElse, playerTwoChoice, playerTwo_choiceMaskString);
       await truffleAssert.reverts(
         rockPaperScissors.contract.methods
           .enrolAndCommit(gameId, _maskedChoice, gameStaked)
@@ -141,9 +139,9 @@ contract("RockPaperScissors", (accounts) => {
       const _maskedChoice = await getMaskedChoice(someoneElse, playerTwoChoice, playerTwo_choiceMaskString);
       await truffleAssert.reverts(
         rockPaperScissors.contract.methods
-          .enrolAndCommit(gameId, _maskedChoice, gameStaked - 1000)
-          .send({ from: playerTwo, value: gameStaked - 1000, gas: gas }),
-        "RockPaperScissors::enrolAndCommit:Insuffcient balance, amountToStake is below staked in Game"
+          .enrolAndCommit(gameId, _maskedChoice, gameStaked.toNumber() - 1000)
+          .send({ from: playerTwo, value: gameStaked.toNumber() - 1000, gas: gas }),
+        "RockPaperScissors::enrolAndCommit:Insuffcient balance, amountToStake is below required stake in Game"
       );
     });
 
