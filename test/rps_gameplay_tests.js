@@ -41,6 +41,7 @@ contract("RockPaperScissors", (accounts) => {
   const playerOne_choiceMaskString = web3.utils.fromAscii("1c04ddc043e");
   const playerTwo_choiceMaskString = web3.utils.fromAscii("01c43e4ddc0");
   const gas = 4000000;
+  const timestampSkipSeconds = 15;
 
   async function getMaskedChoice(player, choice, maskString, maskTimestamp) {
     return await rockPaperScissors.contract.methods
@@ -65,14 +66,13 @@ contract("RockPaperScissors", (accounts) => {
       //create masked choice for playerOne
       maskTimestampOne = (await web3.eth.getBlock("latest")).timestamp;
       maskedChoiceOne = await getMaskedChoice(playerOne, playerOneChoice, playerOne_choiceMaskString, maskTimestampOne);
-      console.log("maskedChoiceOne", maskedChoiceOne);
 
       //create game and commit
       await rockPaperScissors.contract.methods
         .createAndCommit(playerTwo, maskedChoiceOne, gameLifeTime, gameStaked)
         .send({ from: playerOne, value: gameStaked, gas: gas });
       totalStaked.add(gameStaked);
-      await timeHelper.advanceTimeAndBlock(15);
+      await timeHelper.advanceTimeAndBlock(timestampSkipSeconds);
 
       //set gameId variable
       gameId = (await rockPaperScissors.nextGameId.call()).toNumber();
@@ -80,47 +80,37 @@ contract("RockPaperScissors", (accounts) => {
       //create masked choice for playerTwo
       maskTimestampTwo = (await web3.eth.getBlock("latest")).timestamp;
       maskedChoiceTwo = await getMaskedChoice(playerTwo, playerTwoChoice, playerTwo_choiceMaskString, maskTimestampTwo);
-      console.log("maskedChoiceTwo", maskedChoiceTwo);
 
       //Enrol and commit
-      await timeHelper.advanceTimeAndBlock(15);
+      await timeHelper.advanceTimeAndBlock(timestampSkipSeconds);
       const playerTwoStake = new BN(5000000000000000);
       await rockPaperScissors.contract.methods
         .enrolAndCommit(gameId, maskedChoiceTwo)
         .send({ from: playerTwo, value: playerTwoStake, gas: gas });
       const stakedInGame = gameStaked.add(gameStaked);
-      console.log("stakedInGame Before Finish", stakedInGame.toNumber());
 
       //get game moves
       const playerOneGameMove = await rockPaperScissors.contract.methods.getGameMove(gameId, playerOne).call({ from: deployer });
       const playerTwoGameMove = await rockPaperScissors.contract.methods.getGameMove(gameId, playerTwo).call({ from: deployer });
-      console.log("playerOneGameMove", playerOneGameMove);
-      console.log("playerTwoGameMove", playerTwoGameMove);
 
       //reveal by player one
-      await timeHelper.advanceTimeAndBlock(15);
+      await timeHelper.advanceTimeAndBlock(timestampSkipSeconds);
       await rockPaperScissors.contract.methods
         .reveal(gameId, playerOneChoice, playerOne_choiceMaskString, maskTimestampOne)
         .send({ from: playerOne, gas: gas });
 
       //reveal by player two
-      await timeHelper.advanceTimeAndBlock(15);
+      await timeHelper.advanceTimeAndBlock(timestampSkipSeconds);
       await rockPaperScissors.contract.methods
         .reveal(gameId, playerTwoChoice, playerTwo_choiceMaskString, maskTimestampTwo)
         .send({ from: playerTwo, gas: gas });
 
       const gameObj = await rockPaperScissors.games.call(gameId);
-      console.log("game at end", gameObj);
 
       //assert
       const playerOneWinnings = await rockPaperScissors.winnings.call(playerOne);
       const playerTwoWinnings = await rockPaperScissors.winnings.call(playerTwo);
       const contractBalance = await web3.eth.getBalance(deployedInstanceAddress);
-      console.log("playerOneWinnings", playerOneWinnings.toNumber());
-      console.log("playerTwoWinnings", playerTwoWinnings.toNumber());
-      console.log("contractBalance", contractBalance);
-      console.log("totalStaked", totalStaked.toNumber());
-      console.log("totalStaked after finish", gameObj.stake.toNumber());
 
       expect(playerOneWinnings).to.be.a.bignumber.that.equals(gameStaked.add(gameStaked), "playerOne winnings is incorrect");
       expect(playerTwoWinnings).to.be.a.bignumber.that.equals(playerTwoStake.sub(gameStaked), "playerTwo winnings is incorrect");
