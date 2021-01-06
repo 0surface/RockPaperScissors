@@ -2,9 +2,9 @@
 pragma solidity 0.7.0;
 
 import "./SafeMath.sol";
+import "./Ownable.sol";
 
-contract RockPaperScissors {
-
+contract RockPaperScissors is Ownable {
     using SafeMath for uint;
     
     enum Choice  { None, Rock, Paper, Scissors }
