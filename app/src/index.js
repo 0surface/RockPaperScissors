@@ -2,12 +2,16 @@ const Web3 = require("web3");
 const $ = require("jquery");
 const truffleContract = require("truffle-contract");
 const rockPaperScissorsJson = require("../../build/contracts/RockPaperScissors.json");
+const lib = require("./validation");
 
 const App = {
   web3: null,
   activeAccount: null,
   wallets: [],
   rockPaperScissors: truffleContract(rockPaperScissorsJson),
+  GAME_MIN_STAKE: null,
+  GAME_MIN_LIFETIME: null,
+  GAME_MAX_LIFETIME: null,
 
   start: async function () {
     const { web3, $ } = this;
@@ -21,21 +25,33 @@ const App = {
   },
 
   create: async function () {
-    if (!this.validateCreate()) return;
+    const isValid = await lib.createIsValidated(GAME_MIN_STAKE, GAME_MIN_LIFETIME, GAME_MAX_LIFETIME);
+    console.log("isValid", isValid);
+    if (!isValid) {
+      $("#btnCreate").prop("disabled", true);
+      console.log("create has validation error");
+      return;
+    }
     $("#btnCreate").prop("disabled", false);
   },
 
-  validateCreate: async function () {
-    const _opponent = $("#create_opponent").val();
-    const _stake = $("#create_stake").val();
-    const _stakeFrom = $("#create_stakeSource").val();
-    const _chosenMove = $("#create_chosen").val();
-    const _days = $("#gameDays").val();
-    const _hours = $("#gameHours").val();
-    const _minutes = $("#gameMinutes").val();
-    const hasError = false;
+  enrol: async function () {
+    const gameId = $("#enrol_gameId").val();
+    console.log("inside enrol fn - game id", gameId);
+  },
 
-    return hasError;
+  reveal: async function () {
+    const gameId = $("#reveal_gameId").val();
+    console.log("inside reveal fn - game id", gameId);
+  },
+
+  settle: async function () {
+    const gameId = $("#settle_gameId").val();
+    console.log("inside settle fn - game id", gameId);
+  },
+
+  payout: async function () {
+    console.log("inside payout function");
   },
 
   showContractBalance: async function () {
@@ -53,7 +69,7 @@ const App = {
     chosenElem.addClass("btn-success");
 
     console.log("chosenElem.name", chosenElem.val());
-    $("#create_chosen").value = chosenElem.val();
+    $("#create_chosen").val(chosenElem);
     $("#btnCreate").prop("disabled", false);
   },
 
@@ -81,6 +97,51 @@ const App = {
     console.log("this.wallets", this.wallets);
     const activeWallet = this.wallets.find((x) => x.address === activeAddress.toString());
     this.activeAccount = activeWallet;
+  },
+
+  getGameRow: function (data) {
+    return `<tr>
+      <th scope="row">${data.id}</th>
+      <td>${data.status}</td>
+      <td>${data.player1}</td>
+      <td>${data.player2}</td>
+      <td>${data.stake}</td>
+      <td>${data.deadline}</td>      
+    </tr>`;
+  },
+
+  gameListRefresh: async function () {
+    let sampleGames = [];
+    let tableHtml = "";
+    sampleGames.push({
+      id: 1,
+      player1: "Bob",
+      player2: "Dennis",
+      stake: 3.0023,
+      deadline: "01/01/2021 19:35:00",
+      status: "active",
+    });
+    sampleGames.push({
+      id: "2",
+      player1: "Eric",
+      player2: "Alice",
+      stake: 0.00986,
+      deadline: "03/01/2021 00:35:00",
+      status: "pending",
+    });
+    sampleGames.push({
+      id: "3",
+      player1: "Fred",
+      player2: "Homer",
+      stake: 0.006,
+      deadline: "02/01/2021 15:58:00",
+      status: "active",
+    });
+    sampleGames.map((data) => {
+      tableHtml += this.getGameRow(data);
+    });
+
+    document.getElementById("gamesTableData").innerHTML = tableHtml;
   },
 
   setUpApp: async function () {
@@ -112,8 +173,13 @@ const App = {
         }
       })
       .catch(console.error);
+    const deployed = await this.rockPaperScissors.deployed();
+    GAME_MIN_STAKE = (await deployed.MIN_STAKE()).toNumber();
+    GAME_MIN_LIFETIME = (await deployed.MIN_GAME_LIFETIME()).toNumber();
+    GAME_MAX_LIFETIME = (await deployed.MAX_GAME_LIFETIME()).toNumber();
 
     await this.showContractBalance();
+    await this.gameListRefresh();
     this.setActiveWallet();
   },
 };
