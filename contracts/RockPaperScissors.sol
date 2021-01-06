@@ -231,12 +231,12 @@ contract RockPaperScissors is Ownable {
     function payout() public {
         uint balance = winnings[msg.sender]; //SLOAD
         require(balance > 0, "RockPaperScissors::payout:There are no funds to payout");
-        
-        emit LogWinningsBalanceChanged(msg.sender, balance, 0);
+                
         winnings[msg.sender] = 0; //SSTORE 
-        
-        LogPayout(msg.sender, balance);
+        emit LogWinningsBalanceChanged(msg.sender, balance, 0);
+                
         (bool success, ) = (msg.sender).call{value: balance}("");        
         require(success, "payout failed");
+        LogPayout(msg.sender, balance);
     }
 }
