@@ -214,6 +214,7 @@ contract RockPaperScissors is Ownable {
         delete games[gameId];
     }
 
+    /*@dev returns a player's masked commit value and choice value */
     function getGameMove(uint gameId, address player) public view returns (bytes32 _commit, Choice choice) {
         return (games[gameId].gameMoves[player].commit, games[gameId].gameMoves[player].choice);
     }
