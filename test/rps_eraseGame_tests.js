@@ -28,115 +28,105 @@ contract("RockPaperScissors", (accounts) => {
   });
 
   let rockPaperScissors;
-  let gameId;
-  let gameDeadline;
-  let gameLifeTime;
   const CHOICE = {
     NONE: 0,
     ROCK: 1,
     PAPER: 2,
     SCISSORS: 3,
   };
+  let MIN_GAME_LIFETIME;
+  let MAX_GAME_LIFETIME;
+  let MIN_STAKE;
+  let POST_COMMIT_WAIT_WINDOW;
+  let gameId;
+  let gameLifeTime;
+  let deployedInstanceAddress;
+  let maskTimestampOne;
+  let maskedChoiceOne;
+  let maskTimestampTwo;
+  let maskedChoiceTwo;
+  let playerOneStaked;
+  let playerTwoStaked;
+  let totalStaked = new BN(0);
   const deployer = accounts[0];
   const playerOne = accounts[1];
   const playerTwo = accounts[2];
-  const gas = 2000000;
-  const choiceMaskString = web3.utils.fromAscii("1c04ddc043e");
-  const _nullMaskValue = "0x0000000000000000000000000000000000000000000000000000000000000000";
+  const someoneElse = accounts[3];
+  const playerOne_choiceMaskString = web3.utils.fromAscii("1c04ddc043e");
+  const playerTwo_choiceMaskString = web3.utils.fromAscii("01c43e4ddc0");
+  const gas = 4000000;
+  const timestampSkipSeconds = 15;
+  const NULL_BYTES = "0x0000000000000000000000000000000000000000000000000000000000000000";
+  const nullAddress = "0x0000000000000000000000000000000000000000";
+
+  async function getMaskedChoice(player, choice, maskString, maskTimestamp) {
+    return await rockPaperScissors.contract.methods
+      .generateMaskedChoice(choice, maskString, player, maskTimestamp)
+      .call({ from: player });
+  }
+
+  async function SetUpTest(playerOneChoice, playerTwoChoice) {
+    rockPaperScissors = await RockPaperScissors.new({ from: deployer });
+    deployedInstanceAddress = rockPaperScissors.address;
+    MIN_GAME_LIFETIME = await rockPaperScissors.MIN_GAME_LIFETIME.call();
+    MAX_GAME_LIFETIME = await rockPaperScissors.MAX_GAME_LIFETIME.call();
+    MIN_STAKE = await rockPaperScissors.MIN_STAKE.call();
+    POST_COMMIT_WAIT_WINDOW = await rockPaperScissors.POST_COMMIT_WAIT_WINDOW.call(); //1 day
+    gameLifeTime = MIN_GAME_LIFETIME;
+    playerOneStaked = MIN_STAKE;
+
+    //create masked choice for playerOne
+    maskTimestampOne = (await web3.eth.getBlock("latest")).timestamp;
+    maskedChoiceOne = await getMaskedChoice(playerOne, playerOneChoice, playerOne_choiceMaskString, maskTimestampOne);
+
+    //create game and commit
+    await rockPaperScissors.contract.methods
+      .createAndCommit(playerTwo, maskedChoiceOne, gameLifeTime, playerOneStaked)
+      .send({ from: playerOne, value: playerOneStaked, gas: gas });
+    totalStaked = playerOneStaked.add(playerOneStaked);
+    await timeHelper.advanceTimeAndBlock(timestampSkipSeconds);
+
+    //set gameId variable
+    gameId = (await rockPaperScissors.nextGameId.call()).toNumber();
+
+    await expireGame();
+
+    //settle
+    await rockPaperScissors.contract.methods.settle(gameId).send({ from: playerOne, gas: gas });
+  }
+
+  async function expireGame() {
+    const gameDeadline = (await rockPaperScissors.games.call(gameId)).deadline.toNumber();
+    const currentTimestamp = (await web3.eth.getBlock("latest")).timestamp;
+    return await timeHelper.advanceTimeAndBlock(1 + gameDeadline - currentTimestamp);
+  }
 
   describe("eraseGame tests", () => {
     beforeEach("deploy a fresh contract, create a game", async () => {
-      rockPaperScissors = await RockPaperScissors.new({ from: deployer });
-
-      //generate choice
-      const currentBlock = await web3.eth.getBlock();
-      const hashedChoice_1 = await rockPaperScissors.contract.methods
-        .generateMaskedChoice(CHOICE.SCISSORS, choiceMaskString, playerOne, currentBlock.timestamp)
-        .call({ from: playerOne });
-
-      //create game
-      gameLifeTime = await rockPaperScissors.MIN_GAME_LIFETIME.call();
-      const txObj = await rockPaperScissors.contract.methods
-        .createAndCommit(playerTwo, hashedChoice_1, gameLifeTime, 0)
-        .send({ from: playerOne, value: 10000, gas: gas });
-      gameId = await rockPaperScissors.nextGameId.call();
-      console.log("gameId", gameId.toString());
-
-      const createdGame = await rockPaperScissors.games.call(gameId);
-      gameDeadline = createdGame.deadline;
-      console.log("gameDeadline: ", gameDeadline.toNumber());
+      await SetUpTest(CHOICE.SCISSORS, CHOICE.PAPER);
     });
 
-    it("should advance time", async () => {
-      const blockBefore = await web3.eth.getBlock();
-      const blockBeforeTimestamp = blockBefore.timestamp;
-      console.log("blockBeforeTimestamp", blockBeforeTimestamp);
+    it("should erase game struct to default values", async () => {
+      //Act
+      const gameObj = await rockPaperScissors.games.call(gameId);
 
-      advanceTime(3700);
-
-      const settleTxObj = await rockPaperScissors.contract.methods.settle(gameId).call({ from: deployer });
-      console.log("settleTxObj", settleTxObj);
-
-      //timeHelper.advanceTimeAndBlock(advancement);
-      // await web3.currentProvider.send(
-      //   {
-      //     jsonrpc: "2.0",
-      //     method: "evm_increaseTime",
-      //     params: [advancement],
-      //     id: new Date().getTime(),
-      //   },
-      //   (err, result) => {
-      //     console.log("err, result", err, result);
-      //   }
-      // );
-      const blockAfter = await web3.eth.getBlock();
-      console.log("timestamp after advance", blockAfter.timestamp);
+      //Assert
+      expect(gameObj.deadline).to.be.a.bignumber.that.equals(new BN(0), "deadline  not erased after setltement");
+      expect(gameObj.stake).to.be.a.bignumber.that.equals(new BN(0), "stake   not erased after setltement");
+      assert.equal(gameObj.playerOne, nullAddress, "playerOne not erased after setltement");
+      assert.equal(gameObj.playersKey, nullAddress, "playersKey not erased after setltement");
     });
 
-    // it("should show after  time", async () => {
-    //   const blockAfter = await web3.eth.getBlock();
-    //   console.log("timestamp after advance", blockAfter.timestamp);
-    // });
+    it("should erase nested mapping struct", async () => {
+      //Act
+      const playerOneMoves = await rockPaperScissors.contract.methods.getGameMove(gameId, playerOne).call({ from: deployer });
+      const playerTwoMoves = await rockPaperScissors.contract.methods.getGameMove(gameId, playerTwo).call({ from: deployer });
 
-    // it("should erase nested mapping struct", async () => {
-    //   //Arrange
-    //   //advance Time to game expiry
-    //   const block = await web3.eth.getBlock();
-    //   console.log("timestamp before advance", block.timestamp);
-    //   advanceTime(86410);
-    //   const playerOneMove_Before = await rockPaperScissors.contract.methods
-    //     .getGameMove(gameId, playerOne)
-    //     .call({ from: deployer });
-    //   const commit_Before = playerOneMove_Before._commit;
-    //   //console.log("gameDeadline", gameDeadline);
-    //   //const pastExpiryTimeStamp = gameDeadline + 10; // gameDeadline.add(new BN(1));
-    //   //console.log("pastExpiryTimeStamp: ", pastExpiryTimeStamp);
-    //   //console.log("block", block);
-    //   const blockAfter = await web3.eth.getBlock();
-    //   //console.log("blockAfter", blockAfter);
-    //   console.log("timestamp after advance", blockAfter.timestamp);
-    //   //call settle() => implicitly calls eraseGame
-    //   const settleTxObj = await rockPaperScissors.contract.methods.settle(gameId).call({ from: deployer });
-    //   assert.isDefined(settleTxObj, "settle function did not get executed/mined");
-    //   //Act
-    //   //   const eraseTxObj = await rockPaperScissors.contract.methods
-    //   //     .eraseGame(gameId, playerOne, playerTwo)
-    //   //     .send({ from: deployer });
-    //   //   assert.isDefined(eraseTxObj, "eraseGame function did not get executed/mined");
-    //   //   console.log("eraseTxObj ", eraseTxObj);
-    //   const playerOneMove_After = await rockPaperScissors.contract.methods
-    //     .getGameMove(gameId, playerOne)
-    //     .call({ from: deployer });
-    //   const commit_After = playerOneMove_After._commit;
-    //   //Assert
-    //   console.log("playerOneMove_Before,", playerOneMove_Before);
-    //   console.log("commit_Before,", commit_Before);
-    //   console.log("playerOneMove_After,", playerOneMove_After);
-    //   console.log("commit_After, ", commit_After);
-    //   assert.notEqual(commit_Before, commit_After);
-    //   assert.strictEqual(commit_After, _nullMaskValue);
-    // });
-
-    //it("should revert when given", async () => {});
+      //Assert
+      assert.equal(playerOneMoves._commit, NULL_BYTES, "playerOne commit sub struct not erased");
+      assert.equal(playerOneMoves.choice, CHOICE.NONE, "playerOne choice sub struct not erased");
+      assert.equal(playerTwoMoves._commit, NULL_BYTES, "playerTwo commit sub struct not erased");
+      assert.equal(playerTwoMoves.choice, CHOICE.NONE, "playerTwo choice sub struct not erased");
+    });
   });
 });
