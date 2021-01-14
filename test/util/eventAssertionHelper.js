@@ -19,14 +19,14 @@ getEventParams = (txObj, eventName) => {
   }
 };
 
-prameterIsValid = (txObj, eventName, propName, expectedValue, message) => {
+parameterIsValid = (txObj, eventName, propName, expectedValue, message) => {
   assert.equal(txObj.events[eventName].returnValues[propName], expectedValue, message);
   try {
   } catch (ex) {
     console.error(ex);
   }
 };
-prameterIsValidIsStrictlyValid = (txObj, eventName, propName, expectedValue, message) => {
+parameterIsValidIsStrictlyValid = (txObj, eventName, propName, expectedValue, message) => {
   assert.strictEqual(txObj.events[eventName].returnValues[propName], expectedValue, message);
   try {
   } catch (ex) {
@@ -37,6 +37,6 @@ prameterIsValidIsStrictlyValid = (txObj, eventName, propName, expectedValue, mes
 module.exports = {
   eventIsEmitted,
   getEventParams,
-  prameterIsValid,
-  prameterIsValidIsStrictlyValid,
+  parameterIsValid,
+  parameterIsValidIsStrictlyValid,
 };

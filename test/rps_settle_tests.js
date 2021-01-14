@@ -56,7 +56,7 @@ contract("RockPaperScissors", (accounts) => {
     return await timeHelper.advanceTimeAndBlock(1 + gameDeadline - currentTimestamp);
   }
 
-  async function SetUpTest(playerOneChoice, playerTwoChoice) {
+  async function setUpTest(playerOneChoice, playerTwoChoice) {
     rockPaperScissors = await RockPaperScissors.new({ from: deployer });
     deployedInstanceAddress = rockPaperScissors.address;
     MIN_GAME_LIFETIME = await rockPaperScissors.MIN_GAME_LIFETIME.call();
@@ -105,7 +105,7 @@ contract("RockPaperScissors", (accounts) => {
 
   describe("pre-deadline settle function test", () => {
     beforeEach("create game, commit choices", async () => {
-      await SetUpTest(CHOICE.SCISSORS, CHOICE.PAPER);
+      await setUpTest(CHOICE.SCISSORS, CHOICE.PAPER);
     });
     it("should revert when invoked before game has expired", async () => {
       //Assert
@@ -119,13 +119,13 @@ contract("RockPaperScissors", (accounts) => {
   describe("post-deadline settle function tests", () => {
     const p1_choice = CHOICE.SCISSORS;
     beforeEach("", async () => {
-      await SetUpTest(p1_choice, CHOICE.PAPER);
+      await setUpTest(p1_choice, CHOICE.PAPER);
       await expireGame();
     });
 
     it("should settle and erase game", async () => {
       //Act
-      const txObj = await rockPaperScissors.contract.methods.settle(gameId).send({ from: playerOne, gas: gas });
+      await rockPaperScissors.contract.methods.settle(gameId).send({ from: playerOne, gas: gas });
 
       //Assert
       const winnerBalance = await rockPaperScissors.winnings.call(playerOne);
@@ -138,44 +138,43 @@ contract("RockPaperScissors", (accounts) => {
 
     it("should emit events expected when a player wins", async () => {
       //Act
-      const txObj = await rockPaperScissors.contract.methods.settle(gameId).send({ from: playerOne, gas: gas });
+      const txReceipt = await rockPaperScissors.contract.methods.settle(gameId).send({ from: playerOne, gas: gas });
 
       //Assert
-      eventAssert.eventIsEmitted(txObj, "LogWinningsBalanceChanged");
-      eventAssert.eventIsEmitted(txObj, "LogGameFinished");
-      const eventParams = eventAssert.getEventParams(txObj, "LogGameFinished");
-      eventAssert.prameterIsValid(txObj, "LogGameFinished", "gameId", gameId, "LogGameFinished  gameId  incorrect");
-      eventAssert.prameterIsValid(txObj, "LogGameFinished", "winner", playerOne, "LogGameFinished  playerOne  incorrect");
-      eventAssert.prameterIsValid(txObj, "LogGameFinished", "loser", playerTwo, "LogGameFinished  playerTwo  incorrect");
-      eventAssert.prameterIsValid(
-        txObj,
+      eventAssert.eventIsEmitted(txReceipt, "LogWinningsBalanceChanged");
+      eventAssert.eventIsEmitted(txReceipt, "LogGameFinished");
+      eventAssert.parameterIsValid(txReceipt, "LogGameFinished", "gameId", gameId, "LogGameFinished  gameId  incorrect");
+      eventAssert.parameterIsValid(txReceipt, "LogGameFinished", "winner", playerOne, "LogGameFinished  playerOne  incorrect");
+      eventAssert.parameterIsValid(txReceipt, "LogGameFinished", "loser", playerTwo, "LogGameFinished  playerTwo  incorrect");
+      eventAssert.parameterIsValid(
+        txReceipt,
         "LogGameFinished",
         "winnerChoice",
         p1_choice,
         "LogGameFinished winnerChoice is incorrect"
       );
-      eventAssert.prameterIsValid(txObj, "LogGameFinished", "resolver", playerOne, "LogGameFinished  resolver  incorrect");
-      eventAssert.prameterIsValid(txObj, "LogGameFinished", "pay", totalStaked, "LogGameFinished  pay  incorrect");
+      eventAssert.parameterIsValid(txReceipt, "LogGameFinished", "resolver", playerOne, "LogGameFinished  resolver  incorrect");
+      eventAssert.parameterIsValid(txReceipt, "LogGameFinished", "pay", totalStaked, "LogGameFinished  pay  incorrect");
     });
 
     it("should allow any address to settle a game", async () => {
       //Act
-      const txObj = await rockPaperScissors.contract.methods.settle(gameId).send({ from: someoneElse, gas: gas });
+      const txReceipt = await rockPaperScissors.contract.methods.settle(gameId).send({ from: someoneElse, gas: gas });
 
       //Assert
-      eventAssert.eventIsEmitted(txObj, "LogWinningsBalanceChanged");
-      eventAssert.eventIsEmitted(txObj, "LogGameFinished");
+      eventAssert.eventIsEmitted(txReceipt, "LogWinningsBalanceChanged");
+      eventAssert.eventIsEmitted(txReceipt, "LogGameFinished");
     });
   });
 
   describe("post-deadline choice dependant settle function tests", () => {
     it("should settle with playerOne as Winner and pay game total stake", async () => {
       //Arrange
-      await SetUpTest(CHOICE.SCISSORS, CHOICE.PAPER);
+      await setUpTest(CHOICE.SCISSORS, CHOICE.PAPER);
       await expireGame();
 
       //Act
-      const txObj = await rockPaperScissors.contract.methods.settle(gameId).send({ from: playerOne, gas: gas });
+      await rockPaperScissors.contract.methods.settle(gameId).send({ from: playerOne, gas: gas });
 
       //Assert
       const winnerBalance = await rockPaperScissors.winnings.call(playerOne);
@@ -184,11 +183,11 @@ contract("RockPaperScissors", (accounts) => {
 
     it("should settle with playerTwo as Winner and pay game total stake", async () => {
       //Arrange
-      await SetUpTest(CHOICE.PAPER, CHOICE.SCISSORS);
+      await setUpTest(CHOICE.PAPER, CHOICE.SCISSORS);
       await expireGame();
 
       //Act
-      const txObj = await rockPaperScissors.contract.methods.settle(gameId).send({ from: playerOne, gas: gas });
+      await rockPaperScissors.contract.methods.settle(gameId).send({ from: playerOne, gas: gas });
 
       //Assert
       const winnerBalance = await rockPaperScissors.winnings.call(playerOne);
@@ -221,7 +220,7 @@ contract("RockPaperScissors", (accounts) => {
       await expireGame();
 
       //Act
-      const txObj = await rockPaperScissors.contract.methods.settle(gameId).send({ from: playerOne, gas: gas });
+      await rockPaperScissors.contract.methods.settle(gameId).send({ from: playerOne, gas: gas });
 
       //Assert
       const winnerBalance = await rockPaperScissors.winnings.call(playerOne);
@@ -270,7 +269,7 @@ contract("RockPaperScissors", (accounts) => {
       await timeHelper.advanceTimeAndBlock(timestampSkipSeconds);
 
       //Act
-      const txObj = await rockPaperScissors.contract.methods.settle(gameId).send({ from: deployer, gas: gas });
+      await rockPaperScissors.contract.methods.settle(gameId).send({ from: deployer, gas: gas });
 
       //Assert
       const playerOneBalance = await rockPaperScissors.winnings.call(playerOne);

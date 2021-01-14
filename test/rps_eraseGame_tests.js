@@ -1,24 +1,9 @@
 const RockPaperScissors = artifacts.require("RockPaperScissors");
 const timeHelper = require("./util/timeHelper");
-const truffleAssert = require("truffle-assertions");
 const chai = require("chai");
 const { BN } = web3.utils.BN;
 const { assert, expect } = chai;
 chai.use(require("chai-bn")(BN));
-
-function advanceTime(time) {
-  return new Promise((resolve, reject) => {
-    web3.currentProvider.send(
-      {
-        jsonrpc: "2.0",
-        method: "evm_increaseTime",
-        params: [time],
-        id: new Date().getTime(),
-      },
-      (err, result) => (err ? reject(err) : resolve(result))
-    );
-  });
-}
 
 contract("RockPaperScissors", (accounts) => {
   before(async () => {
@@ -43,17 +28,12 @@ contract("RockPaperScissors", (accounts) => {
   let deployedInstanceAddress;
   let maskTimestampOne;
   let maskedChoiceOne;
-  let maskTimestampTwo;
-  let maskedChoiceTwo;
   let playerOneStaked;
-  let playerTwoStaked;
   let totalStaked = new BN(0);
   const deployer = accounts[0];
   const playerOne = accounts[1];
   const playerTwo = accounts[2];
-  const someoneElse = accounts[3];
   const playerOne_choiceMaskString = web3.utils.fromAscii("1c04ddc043e");
-  const playerTwo_choiceMaskString = web3.utils.fromAscii("01c43e4ddc0");
   const gas = 4000000;
   const timestampSkipSeconds = 15;
   const NULL_BYTES = "0x0000000000000000000000000000000000000000000000000000000000000000";
@@ -65,7 +45,7 @@ contract("RockPaperScissors", (accounts) => {
       .call({ from: player });
   }
 
-  async function SetUpTest(playerOneChoice, playerTwoChoice) {
+  async function setUpTest(playerOneChoice, playerTwoChoice) {
     rockPaperScissors = await RockPaperScissors.new({ from: deployer });
     deployedInstanceAddress = rockPaperScissors.address;
     MIN_GAME_LIFETIME = await rockPaperScissors.MIN_GAME_LIFETIME.call();
@@ -103,7 +83,7 @@ contract("RockPaperScissors", (accounts) => {
 
   describe("eraseGame tests", () => {
     beforeEach("deploy a fresh contract, create a game", async () => {
-      await SetUpTest(CHOICE.SCISSORS, CHOICE.PAPER);
+      await setUpTest(CHOICE.SCISSORS, CHOICE.PAPER);
     });
 
     it("should erase game struct to default values", async () => {

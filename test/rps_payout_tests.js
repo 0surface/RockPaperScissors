@@ -50,16 +50,16 @@ contract("RockPaperScissors", (accounts) => {
       .call({ from: player });
   }
 
-  async function getGasCostInWei(txObj) {
-    const _gasAmount = txObj.gasUsed;
-    const thisTx = await web3.eth.getTransaction(txObj.transactionHash);
+  async function getGasCostInWei(txReceipt) {
+    const _gasAmount = txReceipt.gasUsed;
+    const thisTx = await web3.eth.getTransaction(txReceipt.transactionHash);
     const _gasPrice = thisTx.gasPrice;
     const bn_gasPrice = new BN(_gasPrice);
     const bn_gasAmount = new BN(_gasAmount);
     return bn_gasPrice.mul(bn_gasAmount);
   }
 
-  async function SetUpTest(playerOneChoice, playerTwoChoice) {
+  async function setUpTest(playerOneChoice, playerTwoChoice) {
     rockPaperScissors = await RockPaperScissors.new({ from: deployer });
     deployedInstanceAddress = rockPaperScissors.address;
     MIN_GAME_LIFETIME = await rockPaperScissors.MIN_GAME_LIFETIME.call();
@@ -118,7 +118,7 @@ contract("RockPaperScissors", (accounts) => {
   describe("payout function tests", () => {
     it("should revert if player has no winnings", async () => {
       //Arrange, Act
-      await SetUpTest(CHOICE.SCISSORS, CHOICE.PAPER);
+      await setUpTest(CHOICE.SCISSORS, CHOICE.PAPER);
 
       //Assert
       await truffleAssert.reverts(
@@ -129,37 +129,37 @@ contract("RockPaperScissors", (accounts) => {
 
     it("should emit events on successful payout", async () => {
       //Arrange
-      await SetUpTest(CHOICE.SCISSORS, CHOICE.PAPER);
+      await setUpTest(CHOICE.SCISSORS, CHOICE.PAPER);
       await playerTwoRevealsChoice(CHOICE.PAPER);
       const weiBefore = new BN(await web3.eth.getBalance(playerOne));
       const winningBefore = (await rockPaperScissors.winnings.call(playerOne)).toNumber();
 
       //Act
-      const txObj = await rockPaperScissors.contract.methods.payout().send({ from: playerOne, gas: gas });
+      const txReceipt = await rockPaperScissors.contract.methods.payout().send({ from: playerOne, gas: gas });
 
-      const gasCost = await getGasCostInWei(txObj);
+      const gasCost = await getGasCostInWei(txReceipt);
       const weiAfter = new BN(await web3.eth.getBalance(playerOne));
-      const gasCostAdjusted = weiAfter.sub(weiBefore).add(gasCost);
+      const gasCostAdjusted = weiAfter.add(gasCost).sub(weiBefore);
 
       //Assert
-      eventAssert.eventIsEmitted(txObj, "LogWinningsBalanceChanged");
-      eventAssert.prameterIsValid(txObj, "LogWinningsBalanceChanged", "player", playerOne, "LogPayout player incorrect");
-      eventAssert.prameterIsValid(txObj, "LogWinningsBalanceChanged", "oldBalance", winningBefore, "oldBalance incorrect");
-      eventAssert.prameterIsValid(txObj, "LogWinningsBalanceChanged", "newBalance", 0, "LogPayout newBalance incorrect");
+      eventAssert.eventIsEmitted(txReceipt, "LogWinningsBalanceChanged");
+      eventAssert.parameterIsValid(txReceipt, "LogWinningsBalanceChanged", "player", playerOne, "LogPayout player incorrect");
+      eventAssert.parameterIsValid(txReceipt, "LogWinningsBalanceChanged", "oldBalance", winningBefore, "oldBalance incorrect");
+      eventAssert.parameterIsValid(txReceipt, "LogWinningsBalanceChanged", "newBalance", 0, "LogPayout newBalance incorrect");
 
-      eventAssert.eventIsEmitted(txObj, "LogPayout");
-      eventAssert.prameterIsValid(txObj, "LogPayout", "payee", playerOne, "LogPayout  payee  incorrect");
-      eventAssert.prameterIsValid(txObj, "LogPayout", "pay", gasCostAdjusted.toNumber(), "LogPayout  pay  incorrect");
+      eventAssert.eventIsEmitted(txReceipt, "LogPayout");
+      eventAssert.parameterIsValid(txReceipt, "LogPayout", "payee", playerOne, "LogPayout  payee  incorrect");
+      eventAssert.parameterIsValid(txReceipt, "LogPayout", "pay", gasCostAdjusted.toNumber(), "LogPayout  pay  incorrect");
     });
 
     it("should set winner's winnings ledger to zero", async () => {
       //Arrange
-      await SetUpTest(CHOICE.SCISSORS, CHOICE.PAPER);
+      await setUpTest(CHOICE.SCISSORS, CHOICE.PAPER);
       await playerTwoRevealsChoice(CHOICE.PAPER);
       const playerOneWinningsPriorPayout = await rockPaperScissors.winnings.call(playerOne);
 
       //Act
-      const txObj = await rockPaperScissors.contract.methods.payout().send({ from: playerOne, gas: gas });
+      await rockPaperScissors.contract.methods.payout().send({ from: playerOne, gas: gas });
       const playerOneWinningsAfterPayout = await rockPaperScissors.winnings.call(playerOne);
 
       //Assert
@@ -169,14 +169,14 @@ contract("RockPaperScissors", (accounts) => {
 
     it("should send to winner's account the amount in winnings", async () => {
       //Arrange
-      await SetUpTest(CHOICE.SCISSORS, CHOICE.PAPER);
+      await setUpTest(CHOICE.SCISSORS, CHOICE.PAPER);
       await playerTwoRevealsChoice(CHOICE.PAPER);
       const playerOneWinningsPriorPayout = await rockPaperScissors.winnings.call(playerOne);
       const weiBefore = new BN(await web3.eth.getBalance(playerOne));
 
       //Act
-      const txObj = await rockPaperScissors.contract.methods.payout().send({ from: playerOne, gas: gas });
-      const gasCost = await getGasCostInWei(txObj);
+      const txReceipt = await rockPaperScissors.contract.methods.payout().send({ from: playerOne, gas: gas });
+      const gasCost = await getGasCostInWei(txReceipt);
       const weiAfter = new BN(await web3.eth.getBalance(playerOne));
       const gasCostAdjusted = weiAfter.sub(weiBefore).add(gasCost);
 

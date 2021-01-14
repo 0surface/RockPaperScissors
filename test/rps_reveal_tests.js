@@ -52,7 +52,7 @@ contract("RockPaperScissors", (accounts) => {
       .call({ from: player });
   }
 
-  async function SetUpTest() {
+  async function setUpTest() {
     rockPaperScissors = await RockPaperScissors.new({ from: deployer });
     deployedInstanceAddress = rockPaperScissors.address;
     MIN_GAME_LIFETIME = await rockPaperScissors.MIN_GAME_LIFETIME.call();
@@ -79,7 +79,7 @@ contract("RockPaperScissors", (accounts) => {
 
   describe("Pre-enrol reveal test", () => {
     beforeEach("create and set game state variables", async () => {
-      await SetUpTest();
+      await setUpTest();
     });
     it("should revert if caller second player has not yet commited/enrolled", async () => {
       await timeHelper.advanceTimeAndBlock(timestampSkipSeconds);
@@ -128,7 +128,7 @@ contract("RockPaperScissors", (accounts) => {
 
   describe("Post-enrol reveal tests", () => {
     beforeEach("deploy a fresh contract, get game variables, create & enrol", async () => {
-      await SetUpTest();
+      await setUpTest();
 
       //create masked choice for playerTwo
       maskTimestampTwo = (await web3.eth.getBlock("latest")).timestamp;
@@ -203,12 +203,12 @@ contract("RockPaperScissors", (accounts) => {
     it("should emit LogChoiceRevealed event if revealing first ", async () => {
       //reveal by player one
       await timeHelper.advanceTimeAndBlock(timestampSkipSeconds);
-      const txObj = await rockPaperScissors.contract.methods
+      const txReceipt = await rockPaperScissors.contract.methods
         .reveal(gameId, playerOneChoice, playerOne_choiceMaskString, maskTimestampOne)
         .send({ from: playerOne, gas: gas });
 
-      const eventVars = txObj.events.LogChoiceRevealed.returnValues;
-      assert.isDefined(txObj.events.LogChoiceRevealed, "LogChoiceRevealed is not emitted");
+      const eventVars = txReceipt.events.LogChoiceRevealed.returnValues;
+      assert.isDefined(txReceipt.events.LogChoiceRevealed, "LogChoiceRevealed is not emitted");
       assert.strictEqual(Number(eventVars.gameId), gameId, "LogChoiceRevealed event gameId is incorrect");
       assert.strictEqual(Number(eventVars.choice), playerOneChoice, "LogChoiceRevealed event choice is incorrect");
     });

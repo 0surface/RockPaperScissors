@@ -37,7 +37,7 @@ contract("RockPaperScissors", (accounts) => {
       .call({ from: player });
   }
 
-  async function SetUpTest(playerOneChoice, playerTwoChoice) {
+  async function setUpTest(playerOneChoice, playerTwoChoice) {
     rockPaperScissors = await RockPaperScissors.new({ from: deployer });
     deployedInstanceAddress = rockPaperScissors.address;
     const gameLifeTime = await rockPaperScissors.MIN_GAME_LIFETIME.call();
@@ -89,22 +89,22 @@ contract("RockPaperScissors", (accounts) => {
   }
 
   async function setWinLoseGamesTests(playerOneChoice, playerTwoChoice) {
-    const txObj = await SetUpTest(playerOneChoice, playerTwoChoice);
-    eventAssert.eventIsEmitted(txObj, "LogWinningsBalanceChanged");
-    eventAssert.eventIsEmitted(txObj, "LogGameFinished");
+    const txReceipt = await setUpTest(playerOneChoice, playerTwoChoice);
+    eventAssert.eventIsEmitted(txReceipt, "LogWinningsBalanceChanged");
+    eventAssert.eventIsEmitted(txReceipt, "LogGameFinished");
   }
 
   async function setTiedGamesTests(playerOneChoice, playerTwoChoice) {
-    const txObj = await SetUpTest(playerOneChoice, playerTwoChoice);
+    const txReceipt = await setUpTest(playerOneChoice, playerTwoChoice);
 
     //Assert
-    eventAssert.eventIsEmitted(txObj, "LogWinningsBalanceChanged");
-    eventAssert.eventIsEmitted(txObj, "LogGameTied");
+    eventAssert.eventIsEmitted(txReceipt, "LogWinningsBalanceChanged");
+    eventAssert.eventIsEmitted(txReceipt, "LogGameTied");
 
-    const eventTiedParams = eventAssert.getEventParams(txObj, "LogGameTied");
-    eventAssert.prameterIsValid(txObj, "LogGameTied", "gameId", gameId, "LogGameTied gameId incorrect");
-    eventAssert.prameterIsValid(txObj, "LogGameTied", "resolver", playerTwo, "LogGameTied resolver incorrect");
-    eventAssert.prameterIsValid(txObj, "LogGameTied", "choice", playerOneChoice, "LogGameTied choice incorrect");
+    const eventTiedParams = eventAssert.getEventParams(txReceipt, "LogGameTied");
+    eventAssert.parameterIsValid(txReceipt, "LogGameTied", "gameId", gameId, "LogGameTied gameId incorrect");
+    eventAssert.parameterIsValid(txReceipt, "LogGameTied", "resolver", playerTwo, "LogGameTied resolver incorrect");
+    eventAssert.parameterIsValid(txReceipt, "LogGameTied", "choice", playerOneChoice, "LogGameTied choice incorrect");
 
     const playerOneBalance = await rockPaperScissors.winnings.call(playerOne);
     const playerTwoBalance = await rockPaperScissors.winnings.call(playerTwo);
