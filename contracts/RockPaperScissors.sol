@@ -101,27 +101,28 @@ contract RockPaperScissors is Ownable {
         games[gameId].gameMoves[msg.sender].commit = maskedChoice; //SSTORE
 
         if(_deadline < block.timestamp.add(POST_COMMIT_WAIT_WINDOW)) {
-            games[gameId].deadline = POST_COMMIT_WAIT_WINDOW.add(_deadline); //SSTORE
+            games[gameId].deadline = _deadline.add(POST_COMMIT_WAIT_WINDOW); //SSTORE
         }
 
         emit LogGameEnrolled(gameId, msg.sender, maskedChoice, winningsBalance != _newWinningsBalance, msg.value);
     }
 
     function reveal(uint gameId, Choice choice, bytes32 mask,  uint maskingTimestamp) public {
-        require(block.timestamp <= games[gameId].deadline, "RockPaperScissors::reveal:game has expired");   //SSLOAD
-        require(games[gameId].gameMoves[msg.sender].commit == generateMaskedChoice(choice, mask, msg.sender, maskingTimestamp), "RockPaperScissors::reveal:Invalid mask and choice");  //SLOAD        
-        address _counterParty = addressXor(msg.sender, games[gameId].playersKey); //SLOAD
-        bytes32 counterPartyCommit = games[gameId].gameMoves[_counterParty].commit; //SLOAD        
+        Game storage game = games[gameId];
+        require(block.timestamp <= game.deadline, "RockPaperScissors::reveal:game has expired");   //SSLOAD
+        require(game.gameMoves[msg.sender].commit == generateMaskedChoice(choice, mask, msg.sender, maskingTimestamp), "RockPaperScissors::reveal:Invalid mask and choice");  //SLOAD        
+        address _counterParty = addressXor(msg.sender, game.playersKey); //SLOAD
+        bytes32 counterPartyCommit = game.gameMoves[_counterParty].commit; //SLOAD        
         
         require(counterPartyCommit != NULL_BYTES, "RockPaperScissors::reveal:Other Player has not commited yet");
-        Choice counterPartyChoice = games[gameId].gameMoves[_counterParty].choice; //SSLOAD
+        Choice counterPartyChoice = game.gameMoves[_counterParty].choice; //SSLOAD
         
         if(counterPartyChoice == Choice.None){                
-            games[gameId].gameMoves[msg.sender].choice = choice; //SSTORE
+            game.gameMoves[msg.sender].choice = choice; //SSTORE
             emit LogChoiceRevealed(gameId, msg.sender, choice);
         }
         else {
-            uint owed = games[gameId].stake; //SLOAD
+            uint owed = game.stake; //SLOAD
             
             uint result = solve(choice, counterPartyChoice);
 
