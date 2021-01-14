@@ -101,7 +101,7 @@ contract RockPaperScissors is Ownable {
         games[gameId].gameMoves[msg.sender].commit = maskedChoice; //SSTORE
 
         if(_deadline < block.timestamp.add(POST_COMMIT_WAIT_WINDOW)) {
-            games[gameId].deadline += POST_COMMIT_WAIT_WINDOW; //SSTORE
+            games[gameId].deadline = POST_COMMIT_WAIT_WINDOW.add(_deadline); //SSTORE
         }
 
         emit LogGameEnrolled(gameId, msg.sender, maskedChoice, winningsBalance != _newWinningsBalance, msg.value);
