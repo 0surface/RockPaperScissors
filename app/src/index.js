@@ -19,7 +19,6 @@ const App = {
   GAME_MAX_LIFETIME: null,
 
   setUpApp: async function () {
-    console.log("in setupApp");
     const { web3 } = this;
 
     const labels = ["Deployer", "Alice", "Bob", "Carol", "Dennis", "Erin", "Fred", "Gina", "Homer", "Jillian"];
@@ -82,8 +81,35 @@ const App = {
     }
   },
 
+  updateFromChain: async function () {
+    const blockTimeStamp = (await this.web3.eth.getBlock("latest")).timestamp;
+    const { games } = await this.rockPaperScissors.deployed();
+
+    const docs = await gameData.fetchData();
+    docs !== undefined && docs.total_rows > 0
+      ? docs.rows.map(async (x) => {
+          if (x.doc.status < gameUtil.gameStatusEnum.finished) {
+            //get game data from blockchain directly
+            let chainData = await games.call(Number(x.id));
+
+            //update Dapp database's 'deadline, status'
+            console.log("chainData", chainData.deadline.toNumber());
+            await gameData.updateGame(x.id, "deadline", chainData.deadline.toNumber());
+
+            if (blockTimeStamp > x.doc.deadline) {
+              await gameData.updateGame(x.id, "status", gameUtil.gameStatusEnum.expired);
+            }
+          }
+        })
+      : [];
+  },
+
   refreshGames: async function () {
-    await gameState.gameListRefresh($("#addressSelector option:selected").attr("value"));
+    const blockTimeStamp = (await this.web3.eth.getBlock("latest")).timestamp;
+    console.log("blockTimeStamp", blockTimeStamp);
+    await this.updateFromChain();
+    await gameState.gameListRefresh($("#addressSelector option:selected").attr("value"), blockTimeStamp);
+    //await gameData.deleteAllGames();
   },
 
   create: async function () {
@@ -95,20 +121,15 @@ const App = {
     const stake = $("#create_stake").val();
     const stakeInWei = this.web3.utils.toWei(stake);
     const gameLifetime = gameUtil.getGameLifeTimeSeconds();
-    console.log("game creator", creator, "| choice ", gameLifetime, "| lifetime = ", gameLifetime, "| stakeInWei", stakeInWei);
-    console.log("counterparty = ", create_counterparty, "| mask = ", mask, "| bytes32Mask", bytes32Mask);
 
     const isValid = await lib.createIsValidated(GAME_MIN_STAKE_ETH, gameLifetime, GAME_MIN_LIFETIME, GAME_MAX_LIFETIME);
     await gameUtil.setTxProgress("25");
-    setTimeout(console.log("wait"), 3000);
-    console.log("isValid", isValid);
 
-    console.log("| ");
     if (!isValid) {
       $("#btnCreate").prop("disabled", true);
-      console.log("create has validation error");
       return;
     }
+
     $("#btnCreate").prop("disabled", false);
     const maskTimestamp = Math.floor(Date.now() / 1000);
     const maskedChoice = await this.generateMaskedChoice(choice, bytes32Mask, creator, maskTimestamp);
@@ -141,7 +162,6 @@ const App = {
     const event = gameUtil.getEvent(minedTxRecepit, 0);
     const gameId = this.web3.utils.hexToNumber(event[1]);
     const deadline = this.web3.utils.hexToNumber(event[3]);
-    console.log("gameId:", gameId, "| deadline:", deadline);
 
     //save game to 'database'
     const label1 = this.getAddressLabel(creator);
@@ -167,9 +187,7 @@ const App = {
       stakedFromWinnings: false,
       status: gameUtil.gameStatusEnum.created,
     };
-    console.log("save response: ", await gameData.saveGame(game));
-    // const d = await gameData.getGame(gameId);
-    // console.log("data ", d);
+    await gameData.saveGame(game);
   },
 
   enrol: async function () {
@@ -179,13 +197,14 @@ const App = {
     const choice = $("#enrol_chosen").val();
     const game = await gameData.getGame(gameId);
 
-    console.log("inside enrol fn -id,mask, choice, deadline -", gameId, mask, choice, game.deadline);
-    const isValid = await lib.enrolIsValidated(mask, choice, game.deadline);
+    console.log("game.deadline , Math.floor(Date.now() / 1000)", game.deadline, Math.floor(Date.now() / 1000));
+    if (game.deadline < Math.floor(Date.now() / 1000)) {
+      await gameData.updateGame(gameId, "status", gameUtil.gameStatusEnum.expired);
+    }
 
+    const isValid = await lib.enrolIsValidated(mask, choice, game.deadline);
     if (!isValid) {
       $("#btnEnrol").prop("disabled", true);
-      console.log("enrol has validation error");
-      return;
     }
 
     //generate masked choice
@@ -195,7 +214,6 @@ const App = {
     await gameUtil.setTxProgress("50", 1000);
 
     const stakeBN = this.web3.utils.toBN(game.stake);
-    console.log("enrol game.stake", stakeBN.toString());
 
     //sim enrol
     const { enrolAndCommit } = await this.rockPaperScissors.deployed();
@@ -217,27 +235,19 @@ const App = {
     //Post-mining
     await gameUtil.updateUI(txObj, "Enrol", $("#txStatus"));
     await gameUtil.setTxProgress("100");
-    const minedTxRecepit = await this.web3.eth.getTransactionReceipt(txObj.receipt.transactionHash);
-    console.log("minedTxRecepit", minedTxRecepit);
-    const event = gameUtil.getEvent(minedTxRecepit, 0);
-    console.log("event:", event);
-    const commiter = this.web3.utils.toHex(event[2]);
-    console.log("commiter:", commiter);
 
-    //update game 'database' values - status, ?deadline
-    const rcpt1 = await gameData.updateGame(gameId, "status", gameUtil.gameStatusEnum.enrolled);
-    const rcpt2 = await gameData.updateGame(gameId, "stake", stakeBN.add(stakeBN));
-    const rcpt3 = await gameData.updateGame(gameId, "choiceTwo", choice);
-    const rcpt4 = await gameData.updateGame(gameId, "maskTwo", bytes32Mask);
-    const rcpt5 = await gameData.updateGame(gameId, "maskTimestampTwo", maskTimestamp);
+    //update game
+    await gameData.updateGame(gameId, "status", gameUtil.gameStatusEnum.enrolled);
+    await gameData.updateGame(gameId, "stake", stakeBN.add(stakeBN));
+    await gameData.updateGame(gameId, "choiceTwo", choice);
+    await gameData.updateGame(gameId, "maskTwo", bytes32Mask);
+    await gameData.updateGame(gameId, "maskTimestampTwo", maskTimestamp);
     await gameUtil.setTxProgress("0");
-    console.log("enrol update db", rcpt1, rcpt2, rcpt3, rcpt4, rcpt5);
   },
 
   reveal: async function () {
     const gameId = $("#reveal_gameId").val();
     const revealer = this.activeAccount.address;
-    console.log("gameId, revealer: ", gameId, revealer);
     const game = await gameData.getGame(gameId);
 
     const revealerIsPlayerOne = revealer == game.playerOne;
@@ -247,6 +257,10 @@ const App = {
     const mask = revealerIsPlayerOne ? game.maskOne : game.maskTwo;
     const maskingTimestamp = revealerIsPlayerOne ? game.maskTimestampOne : game.maskTimestampTwo;
 
+    if (game.deadline < Math.floor(Date.now() / 1000)) {
+      await gameData.updateGame(gameId, "status", gameUtil.gameStatusEnum.expired);
+    }
+
     //validate
     if (!(await lib.revealIsValidated(game.deadline, choiceIsRevealed))) return;
     await gameUtil.setTxProgress("25");
@@ -255,12 +269,9 @@ const App = {
     const { reveal } = await this.rockPaperScissors.deployed();
     const revealTxParmsObj = { from: revealer };
 
-    console.log("gameId, choice, mask, maskTimestamp:- ", gameId, choice, mask, maskingTimestamp);
-
     try {
-      //uint gameId, Choice choice, bytes32 mask,  uint maskingTimestamp
       await reveal.call(gameId, choice, mask, maskingTimestamp, revealTxParmsObj);
-      await gameUtil.setTxProgress("5");
+      await gameUtil.setTxProgress("50");
     } catch (error) {
       console.error("reveal call: ", error);
     }
@@ -270,52 +281,61 @@ const App = {
       $("#txStatus").html(`reveal Tx pending : [ ${txHash} ]`)
     );
 
-    //post-mined
-    console.log("txObj:- ", txObj);
+    //post-mining
     await gameUtil.updateUI(txObj, "Reveal", $("#txStatus"));
-    await gameUtil.setTxProgress("0");
-    const minedTxRecepit = await this.web3.eth.getTransactionReceipt(txObj.receipt.transactionHash);
-    console.log("minedTxRecepit", minedTxRecepit);
-    const event1 = gameUtil.getEvent(minedTxRecepit, 0);
-    // const event2 = gameUtil.getEvent(minedTxRecepit, 1);
-    console.log("event1:", event1);
-    // console.log("event2:", event2);
-    const _revealer = this.web3.utils.toHex(event1[2]);
-    console.log("revealer:", _revealer);
+    await gameUtil.setTxProgress("100");
 
     //update game db
     if (game.status === 2) {
-      const statusRevealed = await gameData.updateGame(gameId, "status", gameUtil.gameStatusEnum.revealed);
-      console.log("status = revealed", statusRevealed);
+      await gameData.updateGame(gameId, "status", gameUtil.gameStatusEnum.revealed);
     } else if (game.status === 3) {
-      const statusFinished = await gameData.updateGame(gameId, "status", gameUtil.gameStatusEnum.finished);
-      console.log("status = Finished", statusFinished);
+      await gameData.updateGame(gameId, "status", gameUtil.gameStatusEnum.finished);
     }
 
-    const rcpt2 = revealerIsPlayerOne
+    revealerIsPlayerOne
       ? await gameData.updateGame(gameId, "choiceOneShown", true)
       : await gameData.updateGame(gameId, "choiceTwoShown", true);
-    console.log("reveal update db", rcpt2);
+    await gameUtil.setTxProgress("0");
   },
-
-  showState: async function () {},
 
   settle: async function () {
     const gameId = $("#settle_gameId").val();
-    console.log("inside settle fn - game id", gameId);
+
+    const blockTimeStamp = (await this.web3.eth.getBlock("latest")).timestamp;
+    const game = await gameData.getGame(gameId);
+    await gameUtil.setTxProgress("25");
+
+    if (game.deadline > blockTimeStamp) return;
+
+    const { settle } = await this.rockPaperScissors.deployed();
+
+    try {
+      await settle.call(gameId, { from: this.activeAccount.address });
+      await gameUtil.setTxProgress("50");
+    } catch (ex) {
+      console.error("settle call error ", ex);
+    }
+
+    const txRecepit = await settle(gameId, { from: this.activeAccount.address }).on("transactionHash", (txHash) =>
+      $("#txStatus").html(`reveal Tx pending : [ ${txHash} ]`)
+    );
+
+    //post-mining
+    await gameUtil.updateUI(txRecepit, "Settle", $("#txStatus"));
+    await gameUtil.setTxProgress("100");
+
+    await gameData.updateGame(gameId, "status", gameUtil.gameStatusEnum.finished);
+    await gameUtil.setTxProgress("0");
   },
 
   payout: async function () {
-    console.log("inside payout function");
     const payee = this.activeAccount.address;
-    console.log("payee", payee);
-    const { payout, winnings } = await this.rockPaperScissors.deployed();
-
-    const toPay = await winnings.call(payee);
-    console.log("ether toPay", this.web3.utils.fromWei(toPay, "ether"));
+    const { payout } = await this.rockPaperScissors.deployed();
 
     try {
+      await gameUtil.setTxProgress("25");
       await payout.call({ from: payee });
+      await gameUtil.setTxProgress("50");
     } catch (ex) {
       console.error("payout call error: ", ex);
     }
@@ -324,10 +344,9 @@ const App = {
       $("#txStatus").html(`payout Tx pending : [ ${txHash} ]`)
     );
 
+    await gameUtil.setTxProgress("70");
     await gameUtil.updateUI(txRcpt, "Payout", $("#txStatus"));
-    await gameUtil.setTxProgress("0");
-    const minedTxRecepit = await this.web3.eth.getTransactionReceipt(txRcpt.receipt.transactionHash);
-    console.log("minedTxRecepit", minedTxRecepit);
+    await gameUtil.setTxProgress("100");
   },
 
   showContractBalance: async function () {
@@ -344,25 +363,17 @@ const App = {
   },
 
   choiceSelected: function (id) {
-    console.log(id);
-    //console.log("grp ", $("#create_choices button"));
     $("#create_choices button").removeClass("btn-success").addClass("btn-secondary");
     const chosenElem = $(`#${id}`);
     chosenElem.addClass("btn-success");
-
-    console.log("chosenElem.name", chosenElem.val());
     $("#create_chosen").val(chosenElem.val());
     $("#btnCreate").prop("disabled", false);
   },
 
   enrolChoiceSelected: function (id) {
-    console.log(id);
-    //console.log("grp ", $("#enrol_choices button"));
     $("#enrol_choices button").removeClass("btn-success").addClass("btn-secondary");
     const chosenElem = $(`#${id}`);
     chosenElem.addClass("btn-success");
-
-    console.log("Enrol chosen Elem.name", chosenElem.val());
     $("#enrol_chosen").val(chosenElem.val());
     $("#btnEnrol").prop("disabled", false);
   },

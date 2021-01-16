@@ -25,8 +25,8 @@ updateUI = async (txObj, txName, $txStatus) => {
     console.error(txObj.receipt);
     await $txStatus.html(`There was an error in the ${txName} transaction execution, status not 1`, `error`);
   } else if (txObj.receipt.logs.length == 0) {
-    console.warn("Empty logs");
-    console.warn(txObj.receipt);
+    console.log("Empty logs");
+    console.log(txObj.receipt);
     await $txStatus.html(`There was an error in the ${txName} transaction, missing expected event`, `error`);
   } else {
     await $txStatus.html(`${txName} transaction executed`, ``);
@@ -49,31 +49,33 @@ secondsToDisplayString = (seconds) => {
 
 const gameStatusEnum = { created: 1, enrolled: 2, revealed: 3, expired: 4, finished: 5 };
 
-createHtmlGameRow = (game, activeAddress) => {
-  return `<th scope="row" class="">${game._id}</th>
+createHtmlGameRow = (game, activeAddress, blockTimeStamp) => {
+  return `<th scope="row">${game._id}</th>
     <td><strong>${game.status}</strong></td>
     <td>${game.playerOneLabel}</td>
     <td>${game.playerTwoLabel}</td>
     <td>${game.stakeInEther}</td>
-    <td>${calcualteExpiryDate(game.deadline, game.status)}</td>
-    <td>${makeActionButton(game, activeAddress)}</td>    
+    <td>${makeExpiryButton(game.deadline, game.status, blockTimeStamp)}</td>
+    <td>${makeActionButton(game, activeAddress, blockTimeStamp)}</td>    
   </tr>`;
 };
 
-calcualteExpiryDate = (deadline, status) => {
-  if (status === gameStatusEnum.finished)
-    return `<button class="btn btn-sm btn-warning" disabled><i class="fas fa-hourglass-end"></i>&nbsp Expired</button>`;
-
-  const _nowUnix = Math.floor(Date.now() / 1000);
-  console.log("deadline, _nowUnix", deadline, _nowUnix);
-  return deadline < _nowUnix
-    ? `<button class="btn btn-sm btn-warning" disabled>Expired</a></button>`
-    : `${secondsToDisplayString(deadline - _nowUnix)}`;
+makeExpiryButton = (deadline, status, blockTimeStamp) => {
+  const expiredStateElem = `<button class="btn btn-sm btn-warning" disabled><i class="fas fa-hourglass-end"></i>&nbsp Expired</button>`;
+  return status === gameStatusEnum.finished || deadline < blockTimeStamp
+    ? expiredStateElem
+    : `${secondsToDisplayString(deadline - blockTimeStamp)}`;
 };
 
-makeActionButton = (game, activeAddress) => {
+makeActionButton = (game, activeAddress, blockTimeStamp) => {
   const isPlayerOne = activeAddress === game.playerOne;
+  const settleActionButton = `<button class="btn btn-sm btn-warning" data-toggle="modal" data-target="#settleModal" 
+  data-gameid="${game._id}" data-settler="${activeAddress}"> 
+  <i class="fas fa-1x fa-gavel"></i>&nbsp Settle</a></button>`;
 
+  if (game.deadline < blockTimeStamp && game.status != gameStatusEnum.finished) {
+    return settleActionButton;
+  }
   switch (game.status) {
     case gameStatusEnum.created:
       const hasCommited = isPlayerOne ? game.maskOne !== "" : game.maskTwo !== "";
@@ -88,18 +90,15 @@ makeActionButton = (game, activeAddress) => {
               <i class="fas fa-1x fa-eye"></i>&nbsp Reveal</a></button>`;
     case gameStatusEnum.revealed:
       const hasRevealed = isPlayerOne ? game.choiceOneShown : game.choiceTwoShown;
-      console.log("activeAddress:-", activeAddress);
       return hasRevealed
         ? `<button class="btn btn-sm btn-secondary" disabled>Wait</a></button>`
         : `<button class="btn btn-sm btn-info" data-toggle="modal" data-target="#revealModal" 
               data-gameid="${game._id}" data-revealer="${activeAddress}">
-              <i class="fas fa-1x fa-eye"></i>&nbsp Finish</a></button>`;
+              <i class="fas fa-hourglass-end"></i>&nbsp &nbsp Finish</a></button>`;
     case gameStatusEnum.finished:
       return `<button class="btn btn-sm btn-danger" disabled><i class="fas fa-1x fa-dizzy"></i>&nbsp Deleted</a></button>`;
     case gameStatusEnum.expired:
-      return `<button class="btn btn-sm btn-warning" data-toggle="modal" data-target="#settleModal" 
-              data-gameid="${game._id}">
-              <i class="fas fa-1x fa-gavel"></i>&nbsp Settle</a></button>`;
+      return settleActionButton;
 
     default:
       return "";

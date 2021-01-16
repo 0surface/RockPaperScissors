@@ -4,8 +4,6 @@ let db;
 
 init = () => {
   db = new pouchDB("rps");
-  console.log("db init");
-  console.log(db);
 };
 
 setGameData = (id, playerOne, playerTwo, choice, mask, maskTimestamp, stake, deadline, stakedFromWinnings) => {
@@ -24,7 +22,6 @@ setGameData = (id, playerOne, playerTwo, choice, mask, maskTimestamp, stake, dea
 };
 
 saveGame = async (game) => {
-  console.log("insavegame", game);
   return await db.put(game);
 };
 
@@ -47,7 +44,7 @@ deleteAllGames = async () => {
   const rps = await fetchData();
   if (rps !== undefined) {
     rps.rows.map(async (x) => {
-      await this.deleteGame(x.id.toString());
+      await deleteGame(x.id.toString());
     });
   }
 };
@@ -56,7 +53,7 @@ fetchData = async function () {
   try {
     return await db.allDocs({ include_docs: true });
   } catch (ex) {
-    console.log("fetchData error: ", ex);
+    console.error("fetchData error: ", ex);
   }
 };
 

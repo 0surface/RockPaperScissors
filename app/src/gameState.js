@@ -1,26 +1,23 @@
 const gameData = require("./gameData");
 const gameUtil = require("./gameUtil");
 
-gameListRefresh = async function (activeAddress) {
+gameListRefresh = async function (activeAddress, blockTimeStamp) {
   try {
+    $("#gamesTableContainer").show();
+    $("#noGamesBanner").hide().html(``);
     const docs = await gameData.fetchData();
 
-    if (docs !== undefined && docs.total_rows > 0) {
-      document.getElementById("gamesTableData").innerHTML = "";
-      $("#gamesTableContainer").show();
-      $("#noGamesBanner").hide();
-
-      docs.rows
-        .filter((x) => x.doc.playerOne === activeAddress || x.doc.playerTwo === activeAddress)
-        .map(async (y) => {
-          document.getElementById("gamesTableData").innerHTML += gameUtil.createHtmlGameRow(y.doc, activeAddress);
-        });
-    }
+    document.getElementById("gamesTableData").innerHTML =
+      docs !== undefined && docs.total_rows > 0
+        ? docs.rows
+            .filter((x) => x.doc.playerOne === activeAddress || x.doc.playerTwo === activeAddress)
+            .map((y) => gameUtil.createHtmlGameRow(y.doc, activeAddress, blockTimeStamp))
+            .join("\n")
+        : "";
 
     if (document.getElementById("gamesTableData").innerHTML === "") {
       $("#gamesTableContainer").hide();
-      $("#noGamesBanner").show();
-      $("#noGamesBanner").html(`<h4>You have no games</h4>`);
+      $("#noGamesBanner").show().html(`<h4>You have no games</h4>`);
     }
   } catch (ex) {
     console.error("fetchData error: ", ex);
@@ -30,7 +27,7 @@ gameListRefresh = async function (activeAddress) {
 $("#enrolModal").on("show.bs.modal", function (event) {
   let button = $(event.relatedTarget);
   const gameId = button.data("gameid");
-  var modal = $(this);
+  let modal = $(this);
   modal.find("#enrolModalLabel").innerHtml = "Enrol to game id  " + gameId.toString();
   modal.find("#enrol_gameId").val(gameId);
   modal.find("#enrol_stake").val(button.data("stake"));
@@ -42,7 +39,7 @@ $("#revealModal").on("show.bs.modal", async function (event) {
   const gameId = button.data("gameid");
   const revealer = button.data("revealer");
 
-  var modal = $(this);
+  let modal = $(this);
   modal.find("#reveal_gameId").val(gameId);
   modal.find("#reveal_revealer").val(revealer);
   modal.find(".modal-title").text("REVEAL - Game " + gameId.toString());
@@ -50,14 +47,17 @@ $("#revealModal").on("show.bs.modal", async function (event) {
   await displayRevealState(gameId, revealer);
 });
 
+$("#settleModal").on("show.bs.modal", async function (event) {
+  let button = $(event.relatedTarget);
+  const gameId = button.data("gameid");
+  let modal = $(this);
+  modal.find("#settle_gameId").val(button.data("gameid"));
+  modal.find(".modal-title").text("SETTELE - Game - #" + gameId.toString());
+});
+
 $("#payoutModal").on("show.bs.modal", async function (event) {
   const winnings = $("#winningsAmount").html();
-  console.log("winnings", winnings);
-  let modal = $(this);
-
-  // const payee = $(this).find("option:selected").attr("value");
-  // constawait gameData.getGame(payee);
-  modal.find("#payout_balance").html(`You get : <strong> ${winnings} </strpng>`);
+  $(this).find("#payout_balance").html(`You get : <strong> ${winnings} </strpng>`);
 });
 
 $("#addressSelector").on("change", async function (event) {
@@ -68,9 +68,8 @@ displayRevealState = async (gameId, revealer) => {
   const game = await gameData.getGame(gameId);
   const isPlayerOne = revealer === game.playerOne;
   const revealer_choice = isPlayerOne ? game.choiceOne : game.choiceTwo;
-  const revealer_choiceShown = isPlayerOne ? game.choiceOneShown : game.choiceTwoShown;
   const opponent_choice = isPlayerOne ? game.choiceTwo : game.choiceOne;
-  const opponent_ChoiceShown = isPlayerOne ? game.choiceTwoShown : game.choiceOneShown;
+  const opponent_choiceShown = isPlayerOne ? game.choiceTwoShown : game.choiceOneShown;
 
   document.getElementById(
     "reveal_yourchoice_html"
@@ -80,13 +79,13 @@ displayRevealState = async (gameId, revealer) => {
   document.getElementById(
     "reveal_theirchoice_html"
   ).innerHTML = `<button type="button" class="btn btn-lg btn-secondary rpsChoice"  value="${opponent_choice}"">
-    ${getChoiceIcon(opponent_ChoiceShown ? opponent_choice : 0)} </button>`;
+    ${getChoiceIcon(opponent_choiceShown ? opponent_choice : 0)} </button>`;
 
-  document.getElementById("reveal_outcome_html").innerHTML = solveGame(revealer_choice, opponent_choice, opponent_ChoiceShown);
+  document.getElementById("reveal_outcome_html").innerHTML = solveGame(revealer_choice, opponent_choice, opponent_choiceShown);
 };
 
-solveGame = (revealer_choice, opponent_choice, opponent_ChoiceShown) => {
-  if (!opponent_ChoiceShown) {
+solveGame = (revealer_choice, opponent_choice, opponent_choiceShown) => {
+  if (!opponent_choiceShown) {
     return `<button type="button" class="btn btn-lg btn-secondary rpsChoice"><i class="fas fa-question"></i></button>`;
   }
 

@@ -59,9 +59,8 @@
       <br/>
       <section id="games" class="col-md-12" style="width: 100%;margin-left: 10px;">
         <div style="display:inline-block">
-          <button class="btn btn-lg btn-primary" id="btnGamesRefresh" onclick="App.refreshGames()"><i class="fas fa-sync"></i> &nbsp Refresh Games</a></button>           
-          <button class="btn btn-lg btn-success" data-toggle="modal" data-target="#createModal"><i class="fas fa-magic"></i> &nbsp Create </button>
-          
+          <button class="btn btn-lg btn-primary" id="btnGamesRefresh" onclick="App.refreshGames()"><i class="fas fa-sync"></i> &nbsp Refresh Games</a></button>
+          <button class="btn btn-lg btn-success" data-toggle="modal" data-target="#createModal"><i class="fas fa-magic"></i> &nbsp Create </button>                    
         </div>   
         <br/>
         <hr/>
@@ -253,16 +252,13 @@
         <div class="modal-dialog modal-dialog-centered" role="document">
           <div class="modal-content">
             <div class="modal-header">
-              <h5 class="modal-title" id="settleModalLabel">settle Winnings</h5>
+              <h5 class="modal-title" id="settleModalLabel"></h5>
               <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                 <span aria-hidden="true">&times;</span>
               </button>
             </div>
             <div class="modal-body">
-              <div class="form-group">
-                <input type="text" class="form-control" id="settle_gameId" aria-placeholder="game Id" placeholder="game Id" required>
-                <small class="form-text text-danger" id ="settle_gameId_Error"></small>
-              </div>
+              <hidden id="settle_gameId" />
               <button class="btn btn-lg btn-block btn-success" id="btnSettle" onclick="App.settle()"><i class="fas fa-gavel"></i> &nbsp Settle</a> 
             </div>                
           </div>
@@ -276,15 +272,16 @@
         <div class="modal-dialog modal-dialog-centered" role="document">
           <div class="modal-content">
             <div class="modal-header">
-              <h5 class="modal-title" id="payoutModalLabel">Payout Winnings</h5>
+              <h5 class="modal-title" id="payoutModalLabel">Winnings</h5>
               <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                 <span aria-hidden="true">&times;</span>
               </button>
             </div>
             <div class="modal-body">
-              <div class="form-group">                
+              <div class="col-md-12">                
                 <span id="payout_balance" class="alert alert-success" role="alert"></span>
               </div>
+              <br/>
               <div>
                 <button class="btn btn-lg btn-block btn-success" id="btnPayout" data-dismiss="modal" onclick="App.payout()"><i class="fas fa-coins"></i> &nbsp Payout</a>                 
               </div>
