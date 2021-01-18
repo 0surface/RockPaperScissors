@@ -189,16 +189,14 @@ contract RockPaperScissors is Ownable {
         {  
             finish(gameId, playerTwo, playerOne, choiceTwo, staked.add(staked));     
         }
-        else
-        {
-            if(games[gameId].gameMoves[playerTwo].commit == NULL_BYTES)  //SSLOAD
-            {                 
-                finish(gameId, playerOne, playerTwo, choiceOne, staked);
-            }
-            else { 
-                finishTiedGame(gameId, playerOne, playerTwo, Choice.None, staked);
-            }
+        
+        if(games[gameId].gameMoves[playerTwo].commit == NULL_BYTES)  //SSLOAD
+        {                 
+            finish(gameId, playerOne, playerTwo, choiceOne, staked);
         }
+        else { 
+            finishTiedGame(gameId, playerOne, playerTwo, Choice.None, staked);
+        }       
 
         eraseGame(gameId, playerOne, playerTwo);
     }
