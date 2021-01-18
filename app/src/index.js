@@ -3,146 +3,20 @@ const $ = require("jquery");
 const truffleContract = require("truffle-contract");
 const rockPaperScissorsJson = require("../../build/contracts/RockPaperScissors.json");
 const lib = require("./validation");
+const gameUtil = require("./gameUtil");
+const gameData = require("./gameData");
+const gameState = require("./gameState");
 
 const App = {
   web3: null,
   activeAccount: null,
   wallets: [],
   rockPaperScissors: truffleContract(rockPaperScissorsJson),
+  dbInit: null,
   GAME_MIN_STAKE: null,
+  GAME_MIN_STAKE_ETH: null,
   GAME_MIN_LIFETIME: null,
   GAME_MAX_LIFETIME: null,
-
-  start: async function () {
-    const { web3, $ } = this;
-    try {
-      this.rockPaperScissors.setProvider(web3.currentProvider);
-      await this.setUpApp();
-    } catch (error) {
-      console.log(error);
-      console.error("Could not connect to contract or chain.");
-    }
-  },
-
-  create: async function () {
-    const isValid = await lib.createIsValidated(GAME_MIN_STAKE, GAME_MIN_LIFETIME, GAME_MAX_LIFETIME);
-    console.log("isValid", isValid);
-    if (!isValid) {
-      $("#btnCreate").prop("disabled", true);
-      console.log("create has validation error");
-      return;
-    }
-    $("#btnCreate").prop("disabled", false);
-  },
-
-  enrol: async function () {
-    const gameId = $("#enrol_gameId").val();
-    console.log("inside enrol fn - game id", gameId);
-  },
-
-  reveal: async function () {
-    const gameId = $("#reveal_gameId").val();
-    console.log("inside reveal fn - game id", gameId);
-  },
-
-  settle: async function () {
-    const gameId = $("#settle_gameId").val();
-    console.log("inside settle fn - game id", gameId);
-  },
-
-  payout: async function () {
-    console.log("inside payout function");
-  },
-
-  showContractBalance: async function () {
-    const deployed = await this.rockPaperScissors.deployed();
-    const balanceInWei = await this.web3.eth.getBalance(deployed.address);
-    const balanceInEther = this.web3.utils.fromWei(balanceInWei, "ether");
-    $("#contractBalance").html(`${parseFloat(balanceInEther).toFixed(4)} ETH`);
-  },
-
-  choiceSelected: function (id) {
-    console.log(id);
-    console.log("grp ", $("#create_choices button"));
-    $("#create_choices button").removeClass("btn-success").addClass("btn-secondary");
-    const chosenElem = $(`#${id}`);
-    chosenElem.addClass("btn-success");
-
-    console.log("chosenElem.name", chosenElem.val());
-    $("#create_chosen").val(chosenElem);
-    $("#btnCreate").prop("disabled", false);
-  },
-
-  stakeSourceSelected: function (id) {
-    console.log(id);
-    console.log("grp ", $("#create_stake button"));
-
-    $("#create_stake button").not(`#${id}`).removeClass("btn-primary").addClass("btn-secondary");
-
-    //$("#create_stake button").find(`#${id}`).addClass("btn-danger");
-
-    const chosenElem = $(`#${id}`);
-    chosenElem.removeClass("btn-secondary").addClass("btn-primary");
-
-    console.log("chosenElem", chosenElem);
-    console.log("chosenElem.val", chosenElem.val());
-    $("#create_stakeSource").value = chosenElem.val();
-  },
-
-  setActiveWallet: function () {
-    const active = $("#addressSelector option:selected");
-    const activeAddress = active.attr("value");
-    document.getElementById("activeWallet").innerHTML = active.attr("label").split(" - ")[0];
-
-    console.log("this.wallets", this.wallets);
-    const activeWallet = this.wallets.find((x) => x.address === activeAddress.toString());
-    this.activeAccount = activeWallet;
-  },
-
-  getGameRow: function (data) {
-    return `<tr>
-      <th scope="row">${data.id}</th>
-      <td>${data.status}</td>
-      <td>${data.player1}</td>
-      <td>${data.player2}</td>
-      <td>${data.stake}</td>
-      <td>${data.deadline}</td>      
-    </tr>`;
-  },
-
-  gameListRefresh: async function () {
-    let sampleGames = [];
-    let tableHtml = "";
-    sampleGames.push({
-      id: 1,
-      player1: "Bob",
-      player2: "Dennis",
-      stake: 3.0023,
-      deadline: "01/01/2021 19:35:00",
-      status: "active",
-    });
-    sampleGames.push({
-      id: "2",
-      player1: "Eric",
-      player2: "Alice",
-      stake: 0.00986,
-      deadline: "03/01/2021 00:35:00",
-      status: "pending",
-    });
-    sampleGames.push({
-      id: "3",
-      player1: "Fred",
-      player2: "Homer",
-      stake: 0.006,
-      deadline: "02/01/2021 15:58:00",
-      status: "active",
-    });
-    sampleGames.map((data) => {
-      tableHtml += this.getGameRow(data);
-    });
-
-    document.getElementById("gamesTableData").innerHTML = tableHtml;
-  },
 
   setUpApp: async function () {
     const { web3 } = this;
@@ -175,12 +49,359 @@ const App = {
       .catch(console.error);
     const deployed = await this.rockPaperScissors.deployed();
     GAME_MIN_STAKE = (await deployed.MIN_STAKE()).toNumber();
+    GAME_MIN_STAKE_ETH = this.web3.utils.fromWei(GAME_MIN_STAKE.toString(), "ether");
     GAME_MIN_LIFETIME = (await deployed.MIN_GAME_LIFETIME()).toNumber();
     GAME_MAX_LIFETIME = (await deployed.MAX_GAME_LIFETIME()).toNumber();
 
     await this.showContractBalance();
-    await this.gameListRefresh();
+    await this.showGameVariables();
+    await gameData.init();
     this.setActiveWallet();
+
+    await this.refreshGames();
+  },
+
+  start: async function () {
+    const { web3, $ } = this;
+    try {
+      this.rockPaperScissors.setProvider(web3.currentProvider);
+      await this.setUpApp();
+    } catch (error) {
+      console.log(error);
+      console.error("Could not connect to contract or chain.");
+    }
+  },
+
+  generateMaskedChoice: async function (choice, mask, masker, maskTimestamp) {
+    const { generateMaskedChoice } = await this.rockPaperScissors.deployed();
+    try {
+      return await generateMaskedChoice.call(choice, mask, masker, maskTimestamp);
+    } catch (error) {
+      console.error("generateMaskedChoice: ", error);
+    }
+  },
+
+  updateFromChain: async function () {
+    const blockTimeStamp = (await this.web3.eth.getBlock("latest")).timestamp;
+    const { games } = await this.rockPaperScissors.deployed();
+
+    const docs = await gameData.fetchData();
+    docs !== undefined && docs.total_rows > 0
+      ? docs.rows.map(async (x) => {
+          if (x.doc.status < gameUtil.gameStatusEnum.finished) {
+            //get game data from blockchain directly
+            let chainData = await games.call(Number(x.id));
+
+            //update Dapp database's 'deadline, status'
+            console.log("chainData", chainData.deadline.toNumber());
+            await gameData.updateGame(x.id, "deadline", chainData.deadline.toNumber());
+
+            if (blockTimeStamp > x.doc.deadline) {
+              await gameData.updateGame(x.id, "status", gameUtil.gameStatusEnum.expired);
+            }
+          }
+        })
+      : [];
+  },
+
+  refreshGames: async function () {
+    const blockTimeStamp = (await this.web3.eth.getBlock("latest")).timestamp;
+    console.log("blockTimeStamp", blockTimeStamp);
+    await this.updateFromChain();
+    await gameState.gameListRefresh($("#addressSelector option:selected").attr("value"), blockTimeStamp);
+    //await gameData.deleteAllGames();
+  },
+
+  create: async function () {
+    const creator = this.activeAccount.address;
+    const counterParty = $("#create_counterparty").val();
+    const choice = $("#create_chosen").val();
+    const mask = $("#create_mask").val();
+    const bytes32Mask = this.web3.utils.fromAscii(mask);
+    const stake = $("#create_stake").val();
+    const stakeInWei = this.web3.utils.toWei(stake);
+    const gameLifetime = gameUtil.getGameLifeTimeSeconds();
+
+    const isValid = await lib.createIsValidated(GAME_MIN_STAKE_ETH, gameLifetime, GAME_MIN_LIFETIME, GAME_MAX_LIFETIME);
+    await gameUtil.setTxProgress("25");
+
+    if (!isValid) {
+      $("#btnCreate").prop("disabled", true);
+      return;
+    }
+
+    $("#btnCreate").prop("disabled", false);
+    const maskTimestamp = Math.floor(Date.now() / 1000);
+    const maskedChoice = await this.generateMaskedChoice(choice, bytes32Mask, creator, maskTimestamp);
+    await gameUtil.setTxProgress("50", 1000);
+
+    const { createAndCommit } = await this.rockPaperScissors.deployed();
+    const createTxParmsObj = { from: creator, value: stakeInWei };
+
+    //simulate send tx
+    try {
+      await createAndCommit.call(counterParty, maskedChoice, gameLifetime, stakeInWei, createTxParmsObj);
+      await gameUtil.setTxProgress("75", 1000);
+    } catch (error) {
+      console.error("create call: ", error);
+    }
+
+    //send tx
+    const txObj = await createAndCommit(
+      counterParty,
+      maskedChoice,
+      gameLifetime,
+      stakeInWei,
+      createTxParmsObj
+    ).on("transactionHash", (txHash) => $("#txStatus").html(`CreateAndCommit Tx pending : [ ${txHash} ]`));
+
+    //Post-mining
+    await gameUtil.updateUI(txObj, "Create", $("#txStatus"));
+    await gameUtil.setTxProgress("0");
+    const minedTxRecepit = await this.web3.eth.getTransactionReceipt(txObj.receipt.transactionHash);
+    const event = gameUtil.getEvent(minedTxRecepit, 0);
+    const gameId = this.web3.utils.hexToNumber(event[1]);
+    const deadline = this.web3.utils.hexToNumber(event[3]);
+
+    //save game to 'database'
+    const label1 = this.getAddressLabel(creator);
+    const label2 = this.getAddressLabel(counterParty);
+
+    const game = {
+      _id: gameId.toString(),
+      playerOne: creator,
+      playerOneLabel: label1,
+      choiceOne: choice,
+      choiceOneShown: false,
+      maskOne: bytes32Mask,
+      maskTimestampOne: maskTimestamp,
+      playerTwo: counterParty,
+      playerTwoLabel: label2,
+      choiceTwo: 0,
+      choiceTwoShown: false,
+      maskTwo: "",
+      maskTimestampTwo: 0,
+      stake: stakeInWei,
+      stakeInEther: stake,
+      deadline: deadline,
+      stakedFromWinnings: false,
+      status: gameUtil.gameStatusEnum.created,
+    };
+    await gameData.saveGame(game);
+  },
+
+  enrol: async function () {
+    const enrolee = this.activeAccount.address;
+    const gameId = $("#enrol_gameId").val();
+    const mask = $("#enrol_mask").val();
+    const choice = $("#enrol_chosen").val();
+    const game = await gameData.getGame(gameId);
+
+    console.log("game.deadline , Math.floor(Date.now() / 1000)", game.deadline, Math.floor(Date.now() / 1000));
+    if (game.deadline < Math.floor(Date.now() / 1000)) {
+      await gameData.updateGame(gameId, "status", gameUtil.gameStatusEnum.expired);
+    }
+
+    const isValid = await lib.enrolIsValidated(mask, choice, game.deadline);
+    if (!isValid) {
+      $("#btnEnrol").prop("disabled", true);
+    }
+
+    //generate masked choice
+    const maskTimestamp = Math.floor(Date.now() / 1000);
+    const bytes32Mask = this.web3.utils.fromAscii(mask);
+    const maskedChoice = await this.generateMaskedChoice(choice, bytes32Mask, enrolee, maskTimestamp);
+    await gameUtil.setTxProgress("50", 1000);
+
+    const stakeBN = this.web3.utils.toBN(game.stake);
+
+    //sim enrol
+    const { enrolAndCommit } = await this.rockPaperScissors.deployed();
+    const enrolTxParmsObj = { from: enrolee, value: stakeBN };
+
+    //simulate send tx
+    try {
+      await enrolAndCommit.call(gameId, maskedChoice, enrolTxParmsObj);
+      await gameUtil.setTxProgress("75", 1000);
+    } catch (error) {
+      console.error("enrol call: ", error);
+    }
+
+    //send enrol tx
+    const txObj = await enrolAndCommit(gameId, maskedChoice, enrolTxParmsObj).on("transactionHash", (txHash) =>
+      $("#txStatus").html(`enrolAndCommit Tx pending : [ ${txHash} ]`)
+    );
+
+    //Post-mining
+    await gameUtil.updateUI(txObj, "Enrol", $("#txStatus"));
+    await gameUtil.setTxProgress("100");
+
+    //update game
+    await gameData.updateGame(gameId, "status", gameUtil.gameStatusEnum.enrolled);
+    await gameData.updateGame(gameId, "stake", stakeBN.add(stakeBN));
+    await gameData.updateGame(gameId, "choiceTwo", choice);
+    await gameData.updateGame(gameId, "maskTwo", bytes32Mask);
+    await gameData.updateGame(gameId, "maskTimestampTwo", maskTimestamp);
+    await gameUtil.setTxProgress("0");
+  },
+
+  reveal: async function () {
+    const gameId = $("#reveal_gameId").val();
+    const revealer = this.activeAccount.address;
+    const game = await gameData.getGame(gameId);
+
+    const revealerIsPlayerOne = revealer == game.playerOne;
+    const choiceIsRevealed = revealerIsPlayerOne ? game.choiceOneShown : game.choiceTwoShown;
+    if (choiceIsRevealed) return;
+    const choice = revealerIsPlayerOne ? game.choiceOne : game.choiceTwo;
+    const mask = revealerIsPlayerOne ? game.maskOne : game.maskTwo;
+    const maskingTimestamp = revealerIsPlayerOne ? game.maskTimestampOne : game.maskTimestampTwo;
+
+    if (game.deadline < Math.floor(Date.now() / 1000)) {
+      await gameData.updateGame(gameId, "status", gameUtil.gameStatusEnum.expired);
+    }
+
+    //validate
+    if (!(await lib.revealIsValidated(game.deadline, choiceIsRevealed))) return;
+    await gameUtil.setTxProgress("25");
+
+    //sim tx
+    const { reveal } = await this.rockPaperScissors.deployed();
+    const revealTxParmsObj = { from: revealer };
+
+    try {
+      await reveal.call(gameId, choice, mask, maskingTimestamp, revealTxParmsObj);
+      await gameUtil.setTxProgress("50");
+    } catch (error) {
+      console.error("reveal call: ", error);
+    }
+
+    //send tx
+    const txObj = await reveal(gameId, choice, mask, maskingTimestamp, revealTxParmsObj).on("transactionHash", (txHash) =>
+      $("#txStatus").html(`reveal Tx pending : [ ${txHash} ]`)
+    );
+
+    //post-mining
+    await gameUtil.updateUI(txObj, "Reveal", $("#txStatus"));
+    await gameUtil.setTxProgress("100");
+
+    //update game db
+    if (game.status === 2) {
+      await gameData.updateGame(gameId, "status", gameUtil.gameStatusEnum.revealed);
+    } else if (game.status === 3) {
+      await gameData.updateGame(gameId, "status", gameUtil.gameStatusEnum.finished);
+    }
+
+    revealerIsPlayerOne
+      ? await gameData.updateGame(gameId, "choiceOneShown", true)
+      : await gameData.updateGame(gameId, "choiceTwoShown", true);
+    await gameUtil.setTxProgress("0");
+  },
+
+  settle: async function () {
+    const gameId = $("#settle_gameId").val();
+
+    const blockTimeStamp = (await this.web3.eth.getBlock("latest")).timestamp;
+    const game = await gameData.getGame(gameId);
+    await gameUtil.setTxProgress("25");
+
+    if (game.deadline > blockTimeStamp) return;
+
+    const { settle } = await this.rockPaperScissors.deployed();
+
+    try {
+      await settle.call(gameId, { from: this.activeAccount.address });
+      await gameUtil.setTxProgress("50");
+    } catch (ex) {
+      console.error("settle call error ", ex);
+    }
+
+    const txRecepit = await settle(gameId, { from: this.activeAccount.address }).on("transactionHash", (txHash) =>
+      $("#txStatus").html(`reveal Tx pending : [ ${txHash} ]`)
+    );
+
+    //post-mining
+    await gameUtil.updateUI(txRecepit, "Settle", $("#txStatus"));
+    await gameUtil.setTxProgress("100");
+
+    await gameData.updateGame(gameId, "status", gameUtil.gameStatusEnum.finished);
+    await gameUtil.setTxProgress("0");
+  },
+
+  payout: async function () {
+    const payee = this.activeAccount.address;
+    const { payout } = await this.rockPaperScissors.deployed();
+
+    try {
+      await gameUtil.setTxProgress("25");
+      await payout.call({ from: payee });
+      await gameUtil.setTxProgress("50");
+    } catch (ex) {
+      console.error("payout call error: ", ex);
+    }
+
+    const txRcpt = await payout({ from: payee }).on("transactionHash", (txHash) =>
+      $("#txStatus").html(`payout Tx pending : [ ${txHash} ]`)
+    );
+
+    await gameUtil.setTxProgress("70");
+    await gameUtil.updateUI(txRcpt, "Payout", $("#txStatus"));
+    await gameUtil.setTxProgress("100");
+  },
+
+  showContractBalance: async function () {
+    const deployed = await this.rockPaperScissors.deployed();
+    const balanceInWei = await this.web3.eth.getBalance(deployed.address);
+    const balanceInEther = this.web3.utils.fromWei(balanceInWei, "ether");
+    $("#contractBalance").html(`${parseFloat(balanceInEther).toFixed(4)} ETH`);
+  },
+
+  showWinnings: async function () {
+    const { winnings } = await this.rockPaperScissors.deployed();
+    const winningsInEther = this.web3.utils.fromWei(await winnings.call(this.activeAccount.address), "ether");
+    $("#winningsAmount").html(`${winningsInEther} ETH`);
+  },
+
+  choiceSelected: function (id) {
+    $("#create_choices button").removeClass("btn-success").addClass("btn-secondary");
+    const chosenElem = $(`#${id}`);
+    chosenElem.addClass("btn-success");
+    $("#create_chosen").val(chosenElem.val());
+    $("#btnCreate").prop("disabled", false);
+  },
+
+  enrolChoiceSelected: function (id) {
+    $("#enrol_choices button").removeClass("btn-success").addClass("btn-secondary");
+    const chosenElem = $(`#${id}`);
+    chosenElem.addClass("btn-success");
+    $("#enrol_chosen").val(chosenElem.val());
+    $("#btnEnrol").prop("disabled", false);
+  },
+
+  setActiveWallet: function () {
+    const active = $("#addressSelector option:selected");
+    const activeAddress = active.attr("value");
+    document.getElementById("activeWallet").innerHTML = active.attr("label").split(" - ")[0];
+
+    const activeWalletObj = this.wallets.find((x) => x.address === activeAddress.toString());
+    this.activeAccount = activeWalletObj;
+    this.showWinnings();
+  },
+
+  getAddressLabel: function (address) {
+    const active = $("#addressSelector option:selected");
+    document.getElementById("activeWallet").innerHTML = active.attr("label").split(" - ")[0];
+    const activeWalletObj = this.wallets.find((x) => x.address === address.toString());
+    return activeWalletObj.label;
+  },
+
+  showGameVariables: async function () {
+    $("#create_min_stake_message").html(`Minimum Stake  ${GAME_MIN_STAKE_ETH} ETH`);
+    $("#create_gameLength_limits").html(
+      `Minimum ${gameUtil.secondsToDisplayString(GAME_MIN_LIFETIME)},  Maximum ${gameUtil.secondsToDisplayString(
+        GAME_MAX_LIFETIME
+      )}`
+    );
   },
 };
 

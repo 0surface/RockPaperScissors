@@ -25,25 +25,49 @@
             </span>
           </div>                   
         </div>
-      </section>
+      </section>     
+      
       <!-- active address selection -->
       <section>
+        <div class="d-inline">          
+          <span id="activeWallet" style="font-size:xx-large;font-weight:900;margin-left:10px"></span>
+          <span id="winningsAmount" class="col-md-2 alert alert-info" style="font-size:xx-large;font-weight:700;margin-left:10px" role="alert"></span>
+          <button class="btn btn-lg btn-info" data-toggle="modal" data-target="#payoutModal"><i class="fas fa-coins"></i>&nbsp PAYOUT</button>
+        </div>
+        <hr/>
         <div class="d-inline">
-        <select id="addressSelector" name="Addresses" onchange="App.setActiveWallet(this.option)">
-        </select>        
-        <span id="activeWallet" style="font-size:xx-large;font-weight:900;margin-left:10px"></span>
-      </div>
-      </section>
+          <select id="addressSelector" name="Addresses" style="font-size:large;font-weight:500;margin-left:10px"  onchange="App.setActiveWallet(this.option)"></select>          
+        </div>
+        <hr/>
+      </section>  
+
+        <!-- Tx status, progress bar -->
+        <section class="row bg-light" style="align-content:center;" id="statusSection">
+          <div class="col-sm-8 col-md-8">
+            <div class="progress" style="height: 20px;">
+              <div class="progress-bar" id="txStatusProgressbar" role="progressbar" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            </div>
+          <div class="col-sm-8 mt-2 mb-2" style="align-items: center;">
+            <div id="txStatus" class="alert alert-success" role="alert">            
+            </div>
+          </div>
+        </section>  
+        <br/>
 
       <!-- game list -->
       <br/>
-      <section id="games" class="col-md-12" style="width: 80%;margin-left: 10px;">       
-        <div style="width:50%; align-items:center;">
-          <button class="btn btn-sm btn-block btn-primary" id="btnGamesRefresh" onclick="App.gameListRefresh()"><i class="fas fa-sync"></i> &nbsp Refresh Games</a> 
+      <section id="games" class="col-md-12" style="width: 100%;margin-left: 10px;">
+        <div style="display:inline-block">
+          <button class="btn btn-lg btn-primary" id="btnGamesRefresh" onclick="App.refreshGames()"><i class="fas fa-sync"></i> &nbsp Refresh Games</a></button>
+          <button class="btn btn-lg btn-success" data-toggle="modal" data-target="#createModal"><i class="fas fa-magic"></i> &nbsp Create </button>                    
+        </div>   
+        <br/>
+        <hr/>
+        <div id="noGamesBanner" class="col-md-6 alert alert-info" role="alert">          
         </div>
-        <br>
-        <div class="col-md-12">
-          <table id ="gamesTable" class="table table-striped table-sm">
+        <div id="gamesTableContainer" class="col-md-12" >
+          <table id ="gamesTable" class="table table-striped table-sm gametable">
             <thead>
               <tr>
                 <th scope="col">Id</th>
@@ -51,7 +75,8 @@
                 <th scope="col">Player 1</th>
                 <th scope="col">Player 2</th>
                 <th scope="col">Staked</th>
-                <th scope="col">Deadline</th>                
+                <th scope="col">Expires</th>                
+                <th scope="col"></th>  
               </tr>
             </thead>
             <tbody id="gamesTableData" class="small">            
@@ -62,150 +87,209 @@
       <br/>
       <hr/>
       <br/>
-      <!-- main Dapp methods -->
-      <div class="row">
-        <div class="col-sm-3 col-md-3">
-          <div class="list-group" id="list-tab" role="tablist" style="position: relative;">
-            <a class="list-group-item list-group-item-action active" id="list-create-list" data-toggle="list" href="#list-create" role="tab" aria-controls="create">
-              <i class="fas fa-magic"></i>&nbsp CREATE</a>
-            <a class="list-group-item list-group-item-action" id="list-enrol-list" data-toggle="list" href="#list-enrol" role="tab" aria-controls="enrol">
-              <i class="fas fa-sign-in-alt"></i>&nbsp ENROL</a>
-            <a class="list-group-item list-group-item-action" id="list-reveal-list" data-toggle="list" href="#list-reveal" role="tab" aria-controls="reveal">
-              <i class="fas fa-eye"></i>&nbsp REVEAL</a>
-            <a class="list-group-item list-group-item-action" id="list-settle-list" data-toggle="list" href="#list-settle" role="tab" aria-controls="settle">
-              <i class="fas fa-gavel"></i>&nbsp SETTLE</a>
-            <a class="list-group-item list-group-item-action" id="list-payout-list" data-toggle="list" href="#list-payout" role="tab" aria-controls="payout">
-              <i class="fas fa-coins"></i>&nbsp PAYOUT</a>
+    </div>
+
+      <!----Modals        Modals        Modals        Modals      Modals  -->
+
+      <!-- create Modal -->
+      <div class="modal fade" id="createModal" tabindex="-1" role="dialog" aria-labelledby="createModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="createModalLabel">Create Game</h5>
+              <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+              </button>
+            </div>
+            <div class="modal-body">
+              <div class="form-group">
+                <input type="text" class="form-control" id="create_counterparty" aria-placeholder="Opponent" placeholder="Opponent address" required>
+                <small class="form-text text-danger" id ="create_counterparty_Error"></small>
+              </div>
+    
+              <div class="form-group">
+                <input type="number" class="form-control" min="0" id="create_stake" aria-placeholder="Ether to stake" placeholder="Ether to stake">
+                <small class="form-text text-info" id ="create_min_stake_message">Minimum Stake</small>
+                <small class="form-text text-danger" id ="create_stake_Error"></small>                    
+              </div>       
+              
+              <div class="form-group">
+                <input type="text" class="form-control" id="create_mask" minlength="15" aria-placeholder="Mask string" placeholder="Mask string">
+                <small class="form-text text-danger" id ="create_mask_Error"></small>
+              </div>  
+
+              <div class="btn-group mb-2 " role="group" aria-label="Choices" id="create_choices">
+                <button id="create_rock" type="button" class="btn btn-lg btn-secondary rpsChoice"  value="1" onclick="App.choiceSelected(id)">
+                  <i class="fas fa-3x fa-hand-rock"></i>
+                </button>
+                <button id="create_paper" type="button" class="btn btn-lg btn-secondary rpsChoice" value="2" onclick="App.choiceSelected(id)">
+                  <i class="fas fa-3x fa-hand-paper"></i>
+                </button>
+                <button id="create_scissors" type="button" class="btn btn-lg btn-secondary rpsChoice" value="3" onclick="App.choiceSelected(id)">
+                  <i class="fas fa-3x fa-hand-scissors"></i>
+                </button>            
+              </div> 
+              <hidden id="create_chosen"></hidden>  
+              <br>      
+              <div><small class="form-text text-info" id ="create_gameLength_limits">Minimum Maximum Lifetime</small></div>
+              <div class="input-group" id="gameLengthGroup">                      
+                <div class="input-group-prepend">
+                  <span class="input-group-text"><i class="fas fa-hourglass-end"></i> &nbsp Expires In</span>
+                </div>
+                
+                  <input type="number" aria-label="days" max="365" min="0" placeholder= "000" id="create_gameDays" value="0" class="form-control input-sm">
+                  <span class="input-group-text">days</span>              
+                  <input type="number" aria-label="hours" max="24" min="0" placeholder="00" id="create_gameHours" value="24" class="form-control input-sm">
+                  <span class="input-group-text">hrs</span>
+                  <input type="number" aria-label="hours" max="60" min="0" placeholder="00" id="create_gameMinutes" value="0" class="form-control input-sm">
+                  <span class="input-group-text">mins</span>
+                  <small class="form-text text-danger" id ="create_gameLength_Error"></small>
+              </div>
+              <br>           
+              <small class="form-text text-danger" id ="create_chosen_Error"></small>  
+              <div>
+                <button class="btn btn-lg btn-block btn-success" id="btnCreate" data-dismiss="modal" onclick="App.create()"><i class="fas fa-magic"></i> &nbsp Create</a> 
+              </div>
+            </div>
           </div>
         </div>
-        <div class="col-sm-9 col-md-9">
-          <div class="tab-content" id="nav-tabContent">
-            <div class="tab-pane fade show active" id="list-create" role="tabpanel" aria-labelledby="list-create-list">
-              <section id="createGame" style="width: 80%;">
-                <div class="sectionHeader mb-4 box-shadow "><h4 class="font-weight-normal">Create a Game</h4></div>
-                
-                  <div class="form-group">
-                    <input type="text" class="form-control" id="create_opponent" aria-placeholder="Opponent" placeholder="Opponent" required>
-                    <small class="form-text text-danger" id ="create_opponent_Error"></small>
-                  </div>
-        
-                  <div class="form-group">
-                    <input type="number" class="form-control" min="0" id="create_stake" aria-placeholder="Ether to stake" placeholder="Ether to stake">
-                    <small class="form-text text-danger" id ="create_stake_Error"></small>
-                  </div>       
-                  
-                  <div class="form-group">
-                    <input type="text" class="form-control" id="create_mask" aria-placeholder="Mask string" placeholder="Mask string">
-                    <small class="form-text text-danger" id ="create_mask_Error"></small>
-                  </div>  
+      </div>   
 
-                  <div class="btn-group mb-2 rpsChoice" role="group" aria-label="Choices" id="create_choices"">
-                    <button id="create_rock" type="button" class="btn btn-lg btn-secondary rpsChoice"  value="rock" onclick="App.choiceSelected(id)">
-                      <i class="fas fa-lg fa-hand-rock" ></i>
+        <!-- enrol Modal -->
+      <div class="modal fade" id="enrolModal" tabindex="-1" role="dialog" aria-labelledby="enrolModalLabel" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title" id="enrolModalLabel"></h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                  <span aria-hidden="true">&times;</span>
+                </button>
+              </div>
+              <div class="modal-body">
+                <section id="enrolGame">
+                  <hidden id="enrol_gameId"/> 
+                  <hidden id="enrol_deadline"/>              
+                  <div>
+                    <small class="form-text text-danger" id ="enrol_deadline_Error"></small>
+                  </div>                
+                  <div class="form-group">
+                    <input type="text" class="form-control" id="enrol_mask" aria-placeholder="Mask string" placeholder="Mask string" required>
+                    <small class="form-text text-danger" id ="enrol_mask_Error"></small>
+                  </div>
+                  <div class="form-group">
+                    <input type="number" class="form-control" min="0" id="enrol_stake" aria-placeholder="To Stake" disabled placeholder="To Stake" required>
+                    <small class="form-text text-danger" id ="enrol_stake_Error"></small>
+                  </div> 
+                  <div class="btn-group mb-2 rpsChoice" role="group" aria-label="Choices" id="enrol_choices">
+                    <button id="enrol_rock" type="button" class="btn btn-lg btn-secondary rpsChoice"  value="1" onclick="App.enrolChoiceSelected(id)">
+                      <i class="fas fa-3x fa-hand-rock" ></i>
                     </button>
-                    <button id="create_paper" type="button" class="btn btn-lg btn-secondary rpsChoice" value="paper" onclick="App.choiceSelected(id)">
-                      <i class="fas fa-lg fa-hand-paper"></i>
+                    <button id="enrol_paper" type="button" class="btn btn-lg btn-secondary rpsChoice" value="2" onclick="App.enrolChoiceSelected(id)">
+                      <i class="fas fa-3x fa-hand-paper"></i>
                     </button>
-                    <button id="create_scissors" type="button" class="btn btn-lg btn-secondary rpsChoice" value="scissors" onclick="App.choiceSelected(id)">
-                      <i class="fas fa-lg fa-hand-scissors"></i>
+                    <button id="enrol_scissors" type="button" class="btn btn-lg btn-secondary rpsChoice" value="3" onclick="App.enrolChoiceSelected(id)">
+                      <i class="fas fa-3x fa-hand-scissors"></i>
                     </button>            
                   </div> 
-                  <hidden id="create_chosen"></hidden>             
-                  <small class="form-text text-danger" id ="create_chosen_Error"></small>  
-        
-                  <br>      
-                  <div class="input-group" id="gameLengthGroup">  
-                    <div class="input-group-prepend">
-                      <span class="input-group-text"><i class="fas fa-hourglass-end"></i> &nbsp Expires In</span>
-                    </div>
-                      <input type="number" aria-label="days" max="365" min="0" placeholder= "000" id="create_gameDays" value="0" class="form-control input-sm">
-                      <span class="input-group-text">days</span>              
-                      <input type="number" aria-label="hours" max="24" min="0" placeholder="00" id="create_gameHours" value="24" class="form-control input-sm">
-                      <span class="input-group-text">hrs</span>
-                      <input type="number" aria-label="hours" max="60" min="0" placeholder="00" id="create_gameMinutes" value="0" class="form-control input-sm">
-                      <span class="input-group-text">mins</span>
-                      <small class="form-text text-danger" id ="create_gameLength_Error"></small>
-                  </div>
-                  <br>
-                  <button class="btn btn-lg btn-block btn-success" id="btnCreate" onclick="App.create()"><i class="fas fa-magic"></i> &nbsp Create</a> 
-              </section>
-            </div>            
-            <div class="tab-pane fade" id="list-enrol" role="tabpanel" aria-labelledby="list-enrol-list">
-              <section id="enrolGame" style="width: 80%;">
-                <!-- (uint gameId, bytes32 maskedChoice, uint amountToStake) -->
-                <div class="form-group">
-                  <input type="number" class="form-control" id="enrol_gameId" aria-placeholder="Game Id" min ="0" placeholder="Game Id" required>
-                  <small class="form-text text-danger" id ="enrol_gameId_Error"></small>
-                </div>
-                <div class="form-group">
-                  <input type="text" class="form-control" id="enrol_mask" aria-placeholder="Mask string" placeholder="Mask string" required>
-                  <small class="form-text text-danger" id ="enrol_mask_Error"></small>
-                </div>
-                <div class="form-group">
-                  <input type="number" class="form-control" min="0" id="enrol_stake" aria-placeholder="To Stake" placeholder="To Stake" required>
-                  <small class="form-text text-danger" id ="enrol_stake_Error"></small>
-                </div>  
-                <div class="btn-group mb-2 rpsChoice" role="group" aria-label="Choices" id="create_choices"">
-                  <button id="enrol_rock" type="button" class="btn btn-lg btn-secondary rpsChoice"  value="rock" onclick="App.choiceSelected(id)">
-                    <i class="fas fa-lg fa-hand-rock" ></i>
-                  </button>
-                  <button id="enrol_paper" type="button" class="btn btn-lg btn-secondary rpsChoice" value="paper" onclick="App.choiceSelected(id)">
-                    <i class="fas fa-lg fa-hand-paper"></i>
-                  </button>
-                  <button id="enrol_scissors" type="button" class="btn btn-lg btn-secondary rpsChoice" value="scissors" onclick="App.choiceSelected(id)">
-                    <i class="fas fa-lg fa-hand-scissors"></i>
-                  </button>            
-                </div> 
-                <hidden id="enrol_chosen" required></hidden>             
-                <small class="form-text text-danger" id ="enrol_chosen_Error"></small> 
-                
-                <button class="btn btn-lg btn-block btn-success" id="btnEnrol" onclick="App.enrol()"><i class="fas fa-sign-in-alt"></i> &nbsp Enrol</a> 
+                  <hidden id="enrol_chosen" required></hidden>             
+                  <small class="form-text text-danger" id ="enrol_chosen_Error"></small> 
+                  
+                  <button class="btn btn-lg btn-block btn-success" id="btnEnrol" data-dismiss="modal" onclick="App.enrol()"><i class="fas fa-sign-in-alt"></i> &nbsp Enrol</a>   
+                </section>
+              </div>
+            </div>
+          </div>
+      </div>
 
-              </section>
+      <!-- reveal Modal -->
+      <div class="modal fade" id="revealModal" tabindex="-1" role="dialog" aria-labelledby="revealModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="revealModalLabel"></h5>
+              <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+              </button>
             </div>
-            <div class="tab-pane fade" id="list-reveal" role="tabpanel" aria-labelledby="list-reveal-list">
-              <section id="revealChoice" style="width: 80%;">
-                <div class="sectionHeader mb-4 box-shadow "><h4 class="font-weight-normal">Reveal Choice</h4></div>                
-                <div class="form-group">
-                  <input type="text" class="form-control" id="reveal_gameId" aria-placeholder="game Id" placeholder="game Id" required>
-                  <small class="form-text text-danger" id ="reveal_gameId_Error"></small>
-                </div>
-                <div class="form-group">
-                  <input type="text" class="form-control" id="reveal_choice" aria-placeholder="game move choice" placeholder="game move choice" required>
-                  <small class="form-text text-danger" id ="reveal_choice_Error"></small>
-                </div>
-                <div class="form-group">
-                  <input type="text" class="form-control" id="reveal_mask" aria-placeholder="game move mask" placeholder="game move mask" required>
-                  <small class="form-text text-danger" id ="reveal_mask_Error"></small>
-                </div>
-                <button class="btn btn-lg btn-block btn-success" id="btnReveal" onclick="App.reveal()"><i class="fas fa-eye"></i> &nbsp Reveal</a>                 
-              </section>
+            <div class="modal-body">
+              <div id="revealGame" style="align-self:center;">
+                <hidden id="reveal_gameId"/> 
+                <hidden id="reveal_deadline"/>
+                <hidden id="reveal_revealer"/>
+                <hidden id="reveal_yourchoice"/>
+                <hidden id="reveal_theirchoice"/>
+                <div>
+                  <small class="form-text text-danger" id ="reveal_deadline_Error"></small>
+                </div>   
+                <table id ="gamesTable" class="table borderless">
+                  <thead>
+                    <tr>
+                      <th scope="col">Yours</th>
+                      <th scope="col">Theirs</th>
+                      <th scope="col">Outcome</th>                
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td id="reveal_yourchoice_html"></td>
+                      <td id="reveal_theirchoice_html"></td>
+                      <td id="reveal_outcome_html" ></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <button class="btn btn-block btn-lg btn-success" id="btnReveal" data-dismiss="modal" onclick="App.reveal()">                  
+                  <i class="fas fa-eye"></i> &nbsp Reveal</a></button> 
+              </div>
+              </div>                        
+          </div>
+        </div>
+      </div>
+
+      <!-- settle Modal -->
+      <div class="modal fade" id="settleModal" tabindex="-1" role="dialog" aria-labelledby="settleModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="settleModalLabel"></h5>
+              <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+              </button>
             </div>
-            <div class="tab-pane fade" id="list-settle" role="tabpanel" aria-labelledby="list-settle-list">
-              <section id="settleGame" style="width: 80%;">
-                <div class="sectionHeader mb-4 box-shadow "><h4 class="font-weight-normal">Settle Game</h4></div>
-                <div class="form-group">
-                  <input type="text" class="form-control" id="settle_gameId" aria-placeholder="game Id" placeholder="game Id" required>
-                  <small class="form-text text-danger" id ="settle_gameId_Error"></small>
-                </div>
-                <button class="btn btn-lg btn-block btn-success" id="btnSettle" onclick="App.settle()"><i class="fas fa-gavel"></i> &nbsp Settle</a> 
-              </section>
-            </div>
-            <div class="tab-pane fade" id="list-payout" role="tabpanel" aria-labelledby="list-payout-list">
-              <section id="settleGame" style="width: 80%;">
-                <div class="sectionHeader mb-4 box-shadow "><h4 class="font-weight-normal">Payout Winnings</h4></div>
-                <div class="form-group">
-                  <input type="text" class="form-control" id="winningsBalance" aria-placeholder="Winnings Balance" placeholder="Winnings Balance" disabled>                  
-                </div>
-                <button class="btn btn-lg btn-block btn-success" id="btnPayout" onclick="App.payout()"><i class="fas fa-coins"></i> &nbsp Payout</a> 
-              </section>
-            </div>
+            <div class="modal-body">
+              <hidden id="settle_gameId" />
+              <button class="btn btn-lg btn-block btn-success" id="btnSettle" onclick="App.settle()"><i class="fas fa-gavel"></i> &nbsp Settle</a> 
+            </div>                
           </div>
         </div>
       </div>
     </div>
 
 
+      <!-- payout modal -->      
+      <div class="modal fade" id="payoutModal" tabindex="-1" role="dialog" aria-labelledby="payoutModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="payoutModalLabel">Winnings</h5>
+              <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+              </button>
+            </div>
+            <div class="modal-body">
+              <div class="col-md-12">                
+                <span id="payout_balance" class="alert alert-success" role="alert"></span>
+              </div>
+              <br/>
+              <div>
+                <button class="btn btn-lg btn-block btn-success" id="btnPayout" data-dismiss="modal" onclick="App.payout()"><i class="fas fa-coins"></i> &nbsp Payout</a>                 
+              </div>
+            </div>            
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Bootstrap Files -->
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
@@ -218,6 +302,8 @@
       .rpsChoice {
         border-style: solid 2px;
         border-color: black;
+        width: 100px;
+        height: 100px;
       }
       .statusText {
         margin-bottom: 10px;
@@ -231,8 +317,16 @@
       }
       label {
         display: inline-block;
-      }
+      }      
       select.form-control.fa option{ font-weight: 900; }
+      
+      .borderless td, .borderless th {
+        border: none;
+      }
+      .gametable td,tr {
+        font-weight:bold;
+        font-size: large;
+      }
     </style>
   </body>
 </html>

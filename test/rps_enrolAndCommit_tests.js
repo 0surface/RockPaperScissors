@@ -34,7 +34,6 @@ contract("RockPaperScissors", (accounts) => {
   const playerOne_choiceMaskString = web3.utils.fromAscii("1c04ddc043e");
   const playerTwo_choiceMaskString = web3.utils.fromAscii("01c43e4ddc0");
   const gas = 3000000;
-  let maskedChoice;
   let gameId;
   let maskingTimestampOne;
   let maskedChoiceOne;
@@ -151,14 +150,14 @@ contract("RockPaperScissors", (accounts) => {
         .generateMaskedChoice(playerTwoChoice, playerTwo_choiceMaskString, playerTwo, _maskingTimestamp_)
         .call({ from: playerTwo });
       //Act
-      const enrolTxObj = await rockPaperScissors.contract.methods
+      const enrolTxReceipt = await rockPaperScissors.contract.methods
         .enrolAndCommit(gameId, _maskedChoice)
         .send({ from: playerTwo, value: amountToStake, gas: gas });
 
-      const eventValues = enrolTxObj.events.LogGameEnrolled.returnValues;
+      const eventValues = enrolTxReceipt.events.LogGameEnrolled.returnValues;
 
       //Assert
-      assert.isDefined(enrolTxObj.events.LogGameEnrolled, "LogGameEnrolled is not emitted");
+      assert.isDefined(enrolTxReceipt.events.LogGameEnrolled, "LogGameEnrolled is not emitted");
       assert.strictEqual(eventValues.gameId, gameId.toString(), "LogGameEnrolled event gameId value is incorrect");
       assert.strictEqual(eventValues.commiter, playerTwo, "LogGameEnrolled event commiter value is incorrect");
       assert.isFalse(eventValues.stakedFromWinnings, "LogGameEnrolled event stakedFromWinnings value is incorrect");
@@ -170,7 +169,7 @@ contract("RockPaperScissors", (accounts) => {
       const _maskedChoice = await getMaskedChoice(playerTwo, playerTwoChoice, playerTwo_choiceMaskString);
 
       //Act
-      const enrolTxObj = await rockPaperScissors.contract.methods
+      await rockPaperScissors.contract.methods
         .enrolAndCommit(gameId, _maskedChoice)
         .send({ from: playerTwo, value: gameStaked, gas: gas });
 
@@ -191,7 +190,7 @@ contract("RockPaperScissors", (accounts) => {
 
       //Act
       /* No need to advance time as min_game_lifetime(1hours) < POST_COMMIT_WAIT_WINDOW (12 hours)*/
-      enrolTxObj = await rockPaperScissors.contract.methods
+      await rockPaperScissors.contract.methods
         .enrolAndCommit(gameId, _maskedChoice)
         .send({ from: playerTwo, value: gameStaked, gas: gas });
 

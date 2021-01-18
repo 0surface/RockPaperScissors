@@ -31,6 +31,7 @@ contract("RockPaperScissors", (accounts) => {
   const gas = 2000000;
   const choiceMaskString = web3.utils.fromAscii("1c04ddc043e");
   const _nullBytes = "0x0000000000000000000000000000000000000000000000000000000000000000";
+  const nullAddress = "0x0000000000000000000000000000000000000000";
 
   describe("createandcommit tests", () => {
     beforeEach("deploy a fresh contract, generate a choice", async () => {
@@ -59,17 +60,24 @@ contract("RockPaperScissors", (accounts) => {
           .send({ from: playerOne, value: MIN_STAKE, gas: gas })
       );
     });
+    it("should revert when other player's address is null", async () => {
+      await truffleAssert.reverts(
+        rockPaperScissors.contract.methods
+          .createAndCommit(nullAddress, maskedChoice, MIN_GAME_LIFETIME, MIN_STAKE)
+          .send({ from: playerOne, value: MIN_STAKE, gas: gas })
+      );
+    });
     it("should revert when given null maskedChoice value", async () => {
       await truffleAssertions.reverts(
         rockPaperScissors.contract.methods
-          .createAndCommit(playerOne, _nullBytes, MIN_GAME_LIFETIME, MIN_STAKE)
+          .createAndCommit(playerTwo, _nullBytes, MIN_GAME_LIFETIME, MIN_STAKE)
           .send({ from: playerOne, value: MIN_STAKE, gas: gas })
       );
     });
     it("should revert when gameLifeTime is below contract minimum", async () => {
       await truffleAssert.reverts(
         rockPaperScissors.contract.methods
-          .createAndCommit(playerOne, _nullBytes, MIN_GAME_LIFETIME.toNumber() - 1, MIN_STAKE)
+          .createAndCommit(playerTwo, _nullBytes, MIN_GAME_LIFETIME.toNumber() - 1, MIN_STAKE)
           .send({ from: playerOne, value: MIN_STAKE, gas: gas })
       );
     });
@@ -84,7 +92,7 @@ contract("RockPaperScissors", (accounts) => {
       if (MIN_STAKE > 0) {
         await truffleAssert.reverts(
           rockPaperScissors.contract.methods
-            .createAndCommit(playerOne, _nullBytes, MAX_GAME_LIFETIME.toNumber() + 1, 0)
+            .createAndCommit(playerTwo, _nullBytes, MAX_GAME_LIFETIME.toNumber() + 1, 0)
             .send({ from: playerOne, value: MIN_STAKE, gas: gas })
         );
       }
@@ -96,16 +104,16 @@ contract("RockPaperScissors", (accounts) => {
       const gameLifeTime = MIN_GAME_LIFETIME;
 
       //Act
-      const txObj = await rockPaperScissors.contract.methods
+      const txReceipt = await rockPaperScissors.contract.methods
         .createAndCommit(playerTwo, maskedChoice, gameLifeTime, MIN_STAKE)
         .send({ from: playerOne, value: MIN_STAKE, gas: gas });
 
-      const creationBlock = await web3.eth.getBlock(txObj.blockNumber);
+      const creationBlock = await web3.eth.getBlock(txReceipt.blockNumber);
       const _expectedDeadline_BN = new BN(creationBlock.timestamp).add(new BN(gameLifeTime));
-      const eventValues = txObj.events.LogGameCreated.returnValues;
+      const eventValues = txReceipt.events.LogGameCreated.returnValues;
 
       //Assert
-      assert.isDefined(txObj.events.LogGameCreated, "LogGameCreated event not emitted");
+      assert.isDefined(txReceipt.events.LogGameCreated, "LogGameCreated event not emitted");
       assert.strictEqual(eventValues.playerOne, playerOne, "LogGameCreated event playerOne value is incorrect");
       assert.strictEqual(eventValues.playerTwo, playerTwo, "LogGameCreated event playerTwo value is incorrect");
       assert.strictEqual(eventValues.maskedChoice, maskedChoice, "LogGameCreated event maskedChoice value is incorrect");
@@ -119,7 +127,7 @@ contract("RockPaperScissors", (accounts) => {
       const gameIdCountBefore = await rockPaperScissors.nextGameId.call();
 
       //Act
-      const txObj = await rockPaperScissors.contract.methods
+      await rockPaperScissors.contract.methods
         .createAndCommit(playerTwo, maskedChoice, MIN_GAME_LIFETIME, MIN_STAKE)
         .send({ from: playerOne, value: MIN_STAKE, gas: gas });
 
@@ -135,12 +143,12 @@ contract("RockPaperScissors", (accounts) => {
         .call({ fom: deployer });
 
       //Act
-      const txObj = await rockPaperScissors.contract.methods
+      const txReceipt = await rockPaperScissors.contract.methods
         .createAndCommit(playerTwo, maskedChoice, gameLifeTime, MIN_STAKE)
         .send({ from: playerOne, value: MIN_STAKE, gas: gas });
 
       const _gameId = await rockPaperScissors.nextGameId.call();
-      const creationBlock = await web3.eth.getBlock(txObj.blockNumber);
+      const creationBlock = await web3.eth.getBlock(txReceipt.blockNumber);
       const gameObj = await rockPaperScissors.games.call(_gameId);
       const playerOne_Move = await rockPaperScissors.contract.methods
         .getGameMove(Number(_gameId), playerOne)
@@ -176,14 +184,14 @@ contract("RockPaperScissors", (accounts) => {
       const playerOneWinningsBefore = await rockPaperScissors.winnings.call(playerOne);
 
       //Act
-      const txObj = await rockPaperScissors.contract.methods
+      const txReceipt = await rockPaperScissors.contract.methods
         .createAndCommit(playerTwo, maskedChoice, MIN_GAME_LIFETIME, MIN_STAKE)
         .send({ from: playerOne, value: MIN_STAKE.add(MIN_STAKE), gas: gas });
       const playerOneWinningsAfter = await rockPaperScissors.winnings.call(playerOne);
-      const eventObjValues = txObj.events.LogWinningsBalanceChanged.returnValues;
+      const eventObjValues = txReceipt.events.LogWinningsBalanceChanged.returnValues;
 
       //Act
-      assert.isDefined(txObj.events.LogWinningsBalanceChanged, "LogWinningsBalanceChanged not emitted");
+      assert.isDefined(txReceipt.events.LogWinningsBalanceChanged, "LogWinningsBalanceChanged not emitted");
       assert.strictEqual(eventObjValues.player, playerOne, "LogWinningsBalanceChanged event playerOne value is incorrect");
       assert.strictEqual(
         Number(eventObjValues.oldBalance),
